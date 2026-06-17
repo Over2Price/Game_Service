@@ -1,0 +1,47 @@
+﻿@page "/TestEmail"
+@rendermode InteractiveServer
+@using Game_Service.Services
+@inject IMailService MailService
+
+<h3>Тест Email</h3>
+
+<button class="btn btn-primary" @onclick="SendTest">Отправить тест на the.nekit.2004</button>
+
+<p style="margin-top: 1rem;"><b>Статус:</b> @status</p>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <p style="color: red;"><b>Ошибка:</b> @error</p>
+}
+
+@code {
+    private string status = "Ожидание...";
+    private string? error;
+
+    private async Task SendTest()
+    {
+        //status = "Кнопка нажата! Время: " + DateTime.Now.ToString("HH:mm:ss");
+        //await Task.CompletedTask; // Никакого SMTP
+        status = "Отправка...";
+        error = null;
+        StateHasChanged();
+
+        var mailData = new MailData(
+            to: "the.nekit.2004@gmail.com", // <-- ЗАМЕНИ НА СВОЙ
+            subject: "Тест работы программы(тема)",
+            body: "Тест работы программы(текст)"
+        );
+
+        var (success, err) = await MailService.SendAsync(mailData);
+
+        if (success)
+        {
+            status = "Письмо отправлено - проверьте почту(включая папку СПАМ)";
+        }
+        else
+        {
+            status = "Ошибка отправки.";
+            error = err;
+        }
+    }
+}

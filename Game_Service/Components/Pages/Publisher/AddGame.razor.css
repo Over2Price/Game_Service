@@ -1,0 +1,317 @@
+﻿/* ============================================================
+   Страница добавления игры
+   ============================================================ */
+
+.add-game-form {
+    max-width: 800px;
+}
+
+.form-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+
+
+.form-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+
+    .form-card-title i {
+        color: var(--primary);
+    }
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.btn-submit {
+    min-width: 180px;
+}
+
+/* Категории */
+.categories-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.category-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    border: 1.5px solid var(--border-light);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all var(--transition);
+    user-select: none;
+    background: var(--bg-white);
+}
+
+    .category-checkbox:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+
+    .category-checkbox.selected {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
+    }
+
+    .category-checkbox input {
+        display: none;
+    }
+
+/* Превью обложки */
+.cover-preview {
+    width: 200px;
+    height: 300px;
+    border-radius: var(--radius-md);
+    border: 3px dashed var(--border-light);
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    transition: all var(--transition);
+    flex-shrink: 0;
+    background: var(--bg-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+    .cover-preview:hover {
+        border-color: var(--primary);
+        border-style: solid;
+    }
+
+.cover-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    display: block;
+}
+
+.cover-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 3rem;
+    color: var(--text-secondary);
+}
+
+/* Общие стили (повторяются для аватарки обложки) */
+.avatar-upload-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.avatar-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(37, 99, 235, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.5rem;
+    opacity: 0;
+    transition: opacity var(--transition);
+    border-radius: var(--radius-md);
+    pointer-events: none;
+}
+
+.cover-preview:hover .avatar-overlay {
+    opacity: 1;
+}
+
+.avatar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.btn-upload, .btn-remove {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all var(--transition);
+    background: var(--bg-white);
+}
+
+.btn-upload {
+    border: 1.5px solid var(--primary);
+    color: var(--primary);
+}
+
+    .btn-upload:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+.btn-remove {
+    border: 1.5px solid var(--danger);
+    color: var(--danger);
+}
+
+    .btn-remove:hover {
+        background: var(--danger);
+        color: white;
+    }
+
+.hidden-file-input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+}
+
+.categories-select-wrapper {
+    border: 1.5px solid var(--border-light);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.categories-search {
+    position: relative;
+    border-bottom: 1px solid var(--border-light);
+}
+
+    .categories-search i {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .categories-search .form-control {
+        border: none;
+        border-radius: 0;
+        padding-left: 2.25rem;
+        font-size: 0.85rem;
+    }
+
+        .categories-search .form-control:focus {
+            box-shadow: none;
+            outline: none;
+        }
+
+.categories-dropdown {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.category-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+    .category-option:last-child {
+        border-bottom: none;
+    }
+
+    .category-option:hover {
+        background: var(--primary-light);
+    }
+
+    .category-option.selected {
+        background: rgba(37, 99, 235, 0.08);
+        font-weight: 500;
+    }
+
+    .category-option input[type="checkbox"] {
+        display: none;
+    }
+
+    .category-option i {
+        margin-left: auto;
+        color: var(--primary);
+        font-size: 0.9rem;
+    }
+
+/* Выбранные чипсы */
+.selected-categories {
+    margin-top: 1rem;
+}
+
+.selected-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.selected-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    border-radius: var(--radius-full);
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.chip-remove {
+    background: none;
+    border: none;
+    color: var(--primary);
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    justify-content: center;
+}
+
+    .chip-remove:hover {
+        background: var(--primary);
+        color: #fff;
+    }

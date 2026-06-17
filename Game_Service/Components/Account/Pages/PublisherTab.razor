@@ -1,0 +1,176 @@
+﻿@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@inject IServiceScopeFactory ScopeFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+<div>
+    <h2><i class="bi bi-building"></i> Издатель</h2>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">Управление статусом издателя</p>
+
+    @if (!CurrentUser.IsPublisherRepresentative)
+    {
+        @* ===== НЕ ИЗДАТЕЛЬ — ФОРМА ЗАЯВКИ ===== *@
+        <div class="security-card">
+            <h3><i class="bi bi-building-add"></i> Стать издателем</h3>
+            <p class="security-card-desc">Заполните данные компании. Заявка будет рассмотрена администратором.</p>
+
+            <EditForm Model="publisherModel" OnValidSubmit="SubmitPublisherRequest" FormName="become-publisher">
+                <DataAnnotationsValidator />
+                <div class="form-group">
+                    <label class="form-label">Название компании *</label>
+                    <InputText @bind-Value="publisherModel.CompanyName" class="form-control" placeholder="Название вашей компании" />
+                    <ValidationMessage For="() => publisherModel.CompanyName" class="validation-message" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ваша должность</label>
+                    <InputText @bind-Value="publisherModel.Role" class="form-control" placeholder="Community Manager, Developer..." />
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" disabled="@isSubmittingRequest">
+                    @if (isSubmittingRequest)
+                    {
+                        <span class="spinner"></span>
+                        <span>Отправка...</span>
+     }
+                    else
+                    {
+                        <i class="bi bi-send"></i>
+                        <span>Отправить заявку</span>
+     }
+                </button>
+            </EditForm>
+
+            @if (!string.IsNullOrEmpty(requestMessage))
+            {
+                <div class="alert @(requestSuccess ? "alert-success" : "alert-error") fade-in" style="margin-top: 0.75rem;">
+                    <i class="bi bi-@(requestSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                    <span>@requestMessage</span>
+                </div>
+            }
+        </div>
+    }
+    else if (!CurrentUser.IsPublisherVerified)
+    {
+        @* ===== ОЖИДАЕТ ВЕРИФИКАЦИИ ===== *@
+        <div class="security-card">
+            <h3><i class="bi bi-hourglass-split"></i> Заявка на рассмотрении</h3>
+            <p class="security-card-desc">
+                Ваша заявка на получение статуса издателя находится на рассмотрении у администратора.
+                Обычно это занимает до 24 часов.
+            </p>
+            <div class="publisher-status">
+                <div class="publisher-status-item">
+                    <span class="publisher-status-label">Компания</span>
+                    <span class="publisher-status-value">@CurrentUser.Publisher?.GamePublisherName</span>
+                </div>
+                <div class="publisher-status-item">
+                    <span class="publisher-status-label">Должность</span>
+                    <span class="publisher-status-value">@(CurrentUser.PublisherRole ?? "—")</span>
+                </div>
+                <div class="publisher-status-item">
+                    <span class="publisher-status-label">Статус</span>
+                    <span class="publisher-status-value" style="color: #D97706;">Ожидает верификации</span>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* ===== ВЕРИФИЦИРОВАННЫЙ ИЗДАТЕЛЬ ===== *@
+        <div class="security-card">
+            <h3><i class="bi bi-building-check"></i> Издатель верифицирован</h3>
+            <div class="publisher-status">
+                <div class="publisher-status-item">
+                    <span class="publisher-status-label">Компания</span>
+                    <span class="publisher-status-value">@CurrentUser.Publisher?.GamePublisherName</span>
+                </div>
+                <div class="publisher-status-item">
+                    <span class="publisher-status-label">Должность</span>
+                    <span class="publisher-status-value">@(CurrentUser.PublisherRole ?? "—")</span>
+                </div>
+                <div class="publisher-status-item">
+                    <span class="publisher-status-label">Статус</span>
+                    <span class="publisher-status-value" style="color: #16A34A;">Верифицирован</span>
+                </div>
+            </div>
+
+            <div class="publisher-actions" style="margin-top: 1.25rem; display: flex; gap: 0.75rem;">
+                <a href="/Publisher/Profile" class="btn btn-primary btn-sm">
+                    <i class="bi bi-pencil"></i> Профиль издателя
+                </a>
+                <a href="/Publisher/AddGame" class="btn btn-primary btn-sm">
+                    <i class="bi bi-plus-circle"></i> Добавить игру
+                </a>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ApplicationUser CurrentUser { get; set; } = null!;
+    [Parameter] public EventCallback<ApplicationUser> OnUserUpdated { get; set; }
+
+    private PublisherRequestModel publisherModel = new();
+    private bool isSubmittingRequest;
+    private string? requestMessage;
+    private bool requestSuccess;
+
+    private async Task SubmitPublisherRequest()
+    {
+        isSubmittingRequest = true;
+        requestMessage = null;
+
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var appUser = await UserManager.GetUserAsync(authState.User);
+            if (appUser == null) return;
+
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            // Создаём компанию издателя
+            var publisher = new GamePublisher
+            {
+                GamePublisherName = publisherModel.CompanyName.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
+            dbContext.GamePublishers.Add(publisher);
+            await dbContext.SaveChangesAsync();
+
+            // Привязываем пользователя
+            appUser.IsPublisherRepresentative = true;
+            appUser.PublisherId = publisher.Id;
+            appUser.PublisherRole = publisherModel.Role?.Trim();
+            appUser.IsPublisherVerified = false;
+            await UserManager.UpdateAsync(appUser);
+
+            await OnUserUpdated.InvokeAsync(appUser);
+
+            requestMessage = "Заявка отправлена! Ожидайте верификации администратором.";
+            requestSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            requestMessage = $"Ошибка: {ex.Message}";
+            requestSuccess = false;
+        }
+        finally
+        {
+            isSubmittingRequest = false;
+        }
+    }
+
+    private class PublisherRequestModel
+    {
+        [Required(ErrorMessage = "Введите название компании")]
+        [MaxLength(200)]
+        public string CompanyName { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string? Role { get; set; }
+    }
+}

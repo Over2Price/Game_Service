@@ -1,0 +1,420 @@
+﻿@page "/Account/Register"
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using System.Text.Encodings.Web
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Game_Service.Services
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject ILogger<Register> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+@inject IServiceScopeFactory ScopeFactory
+@inject FileUploadService FileUploadService
+
+<PageTitle>Регистрация — Game Service</PageTitle>
+
+<div class="register-page">
+    <div class="register-container">
+        @* Левая декоративная часть *@
+        <div class="register-decoration">
+            <div class="decoration-content">
+                <h2>Game Service</h2>
+            </div>
+            <div class="decoration-circles">
+                <div class="circle circle-1"></div>
+                <div class="circle circle-2"></div>
+                <div class="circle circle-3"></div>
+            </div>
+        </div>
+
+        @* Правая часть — форма регистрации *@
+        <div class="register-form-section">
+            <div class="form-header">
+                <h1>Создать аккаунт</h1>
+                <p>
+                    Уже есть аккаунт?
+                    <a href="/Account/Login">Войти</a>
+                </p>
+            </div>
+
+            @if (identityErrors is not null && identityErrors.Any())
+            {
+                <div class="alert alert-error fade-in">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <div>
+                        @foreach (var error in identityErrors)
+                        {
+                            <div>@error.Description</div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <StatusMessage Message="@Message" />
+
+            <EditForm Model="Input" method="post" OnValidSubmit="RegisterUserAsync" FormName="register">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="validation-summary" />
+
+                @* Email *@
+                <div class="form-group">
+                    <label for="Input_Email" class="form-label">Email</label>
+                    <InputText @bind-Value="Input.Email" id="Input_Email" class="form-control"
+                               autocomplete="email" aria-required="true" placeholder="you@example.com" />
+                    <ValidationMessage For="() => Input.Email" class="validation-message" />
+                </div>
+
+                @* Отображаемое имя *@
+                <div class="form-group">
+                    <label for="Input_DisplayName" class="form-label">
+                        Отображаемое имя <span class="text-muted">(необязательно)</span>
+                    </label>
+                    <InputText @bind-Value="Input.DisplayName" id="Input_DisplayName" class="form-control"
+                               placeholder="Как к вам обращаться?" />
+                    <ValidationMessage For="() => Input.DisplayName" class="validation-message" />
+                </div>
+
+                @* Аватарка *@
+                <div class="form-group">
+                    <label class="form-label">Аватарка <span class="text-muted">(необязательно)</span></label>
+                    <div class="avatar-upload-wrapper">
+                        <label class="avatar-preview" for="avatar-file-input">
+                            @if (!string.IsNullOrEmpty(avatarPreview))
+                            {
+                                <img src="@avatarPreview" alt="Preview" class="avatar-image" />
+                                <span class="avatar-overlay">
+                                    <i class="bi bi-pencil"></i>
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="avatar-placeholder">
+                                    <i class="bi bi-person"></i>
+                                </span>
+                                <span class="avatar-overlay">
+                                    <i class="bi bi-camera"></i>
+                                </span>
+                            }
+                        </label>
+                        <div class="avatar-actions">
+                            <label class="btn-upload" for="avatar-file-input">
+                                <i class="bi bi-upload"></i>
+                                <span>Загрузить фото</span>
+                            </label>
+                            @if (!string.IsNullOrEmpty(avatarPreview))
+                            {
+                                <button type="button" class="btn-remove" @onclick="RemoveAvatar">
+                                    <i class="bi bi-trash"></i>
+                                    <span>Удалить</span>
+                                </button>
+                            }
+                        </div>
+                        <InputFile id="avatar-file-input"
+                                   class="hidden-file-input"
+                                   accept="image/jpeg,image/png,image/gif,image/webp"
+                                   OnChange="OnAvatarChanged" />
+                    </div>
+                    <small class="form-hint">JPG, PNG, GIF или WebP. Максимум 2 МБ.</small>
+                </div>
+
+                @* Страна и Дата рождения *@
+                <div class="form-row form-row-2">
+                    <div class="form-group">
+                        <label for="Input_CountryId" class="form-label">
+                            Страна <span class="text-muted">(необязательно)</span>
+                        </label>
+                        <InputSelect @bind-Value="Input.CountryId" id="Input_CountryId" class="form-select">
+                            <option value="">— Выберите страну —</option>
+                            @foreach (var country in countries)
+                            {
+                                <option value="@country.Id">@country.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => Input.CountryId" class="validation-message" />
+                    </div>
+                    <div class="form-group">
+                        <label for="Input_DateOfBirth" class="form-label">
+                            Дата рождения <span class="text-muted">(необязательно)</span>
+                        </label>
+                        <InputDate @bind-Value="Input.DateOfBirth" id="Input_DateOfBirth" class="form-control" />
+                        <ValidationMessage For="() => Input.DateOfBirth" class="validation-message" />
+                    </div>
+                </div>
+
+                @* Пароль *@
+                <div class="form-group">
+                    <label for="Input_Password" class="form-label">Пароль</label>
+                    <div class="password-input-wrapper">
+                        <InputText @bind-Value="Input.Password" id="Input_Password" class="form-control"
+                                   autocomplete="new-password" aria-required="true" placeholder="Минимум 6 символов"
+                                   type="@(showPassword ? "text" : "password")" />
+                        <button type="button" class="password-toggle" @onclick="TogglePassword" tabindex="-1">
+                            <i class="bi bi-@(showPassword ? "eye-slash" : "eye")"></i>
+                        </button>
+                    </div>
+                    <ValidationMessage For="() => Input.Password" class="validation-message" />
+                </div>
+
+                @* Подтверждение пароля *@
+                <div class="form-group">
+                    <label for="Input_ConfirmPassword" class="form-label">Подтверждение пароля</label>
+                    <div class="password-input-wrapper">
+                        <InputText @bind-Value="Input.ConfirmPassword" id="Input_ConfirmPassword" class="form-control"
+                                   autocomplete="new-password" aria-required="true" placeholder="Повторите пароль"
+                                   type="@(showConfirmPassword ? "text" : "password")" />
+                        <button type="button" class="password-toggle" @onclick="ToggleConfirmPassword" tabindex="-1">
+                            <i class="bi bi-@(showConfirmPassword ? "eye-slash" : "eye")"></i>
+                        </button>
+                    </div>
+                    <ValidationMessage For="() => Input.ConfirmPassword" class="validation-message" />
+                </div>
+
+                @* Согласие с условиями *@
+                <div class="form-group form-check-wrapper terms-check">
+                    <InputCheckbox @bind-Value="Input.AcceptTerms" id="Input_AcceptTerms" class="form-check-input" />
+                    <label for="Input_AcceptTerms" class="form-check-label">
+                        Я принимаю <a href="/terms" target="_blank">условия использования</a> и
+                        <a href="/privacy" target="_blank">политику конфиденциальности</a>
+                    </label>
+                    <ValidationMessage For="() => Input.AcceptTerms" class="validation-message" />
+                </div>
+
+                @* Кнопка отправки *@
+                <button type="submit" class="btn btn-primary btn-submit" disabled="@isSubmitting">
+                    @if (isSubmitting)
+                    {
+                        <span class="spinner"></span>
+                        <span>Создание аккаунта...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-person-plus"></i>
+                        <span>Создать аккаунт</span>
+                    }
+                </button>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IEnumerable<IdentityError>? identityErrors;
+    private bool isSubmitting;
+    private bool showPassword;
+    private bool showConfirmPassword;
+    private List<Country> countries = new();
+    private string? avatarPreview;
+    private IBrowserFile? selectedAvatarFile;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private string? Message => identityErrors is null ? null :
+        $"Ошибка: {string.Join("; ", identityErrors.Select(e => e.Description))}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        countries = await dbContext.Countries
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+    }
+
+    private async Task RegisterUserAsync(EditContext editContext)
+    {
+        isSubmitting = true;
+        identityErrors = null;
+
+        try
+        {
+            // 1. Создание пользователя
+            var user = new ApplicationUser
+            {
+                UserName = Input.Email.Trim().ToLower(),
+                Email = Input.Email.Trim().ToLower(),
+                DisplayName = Input.DisplayName?.Trim(),
+                CountryId = Input.CountryId,
+                DateOfBirth = Input.DateOfBirth,
+                CreatedAt = DateTime.UtcNow,
+                Status = UserStatus.Active
+            };
+
+            await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+            var emailStore = GetEmailStore();
+            await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
+
+            var result = await UserManager.CreateAsync(user, Input.Password);
+
+            if (!result.Succeeded)
+            {
+                identityErrors = result.Errors;
+                return;
+            }
+
+            Logger.LogInformation("Пользователь {Email} создан успешно", Input.Email);
+
+            // 2. Назначение роли
+            try
+            {
+                await UserManager.AddToRoleAsync(user, "User");
+                Logger.LogInformation("Роль User назначена для {Email}", Input.Email);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Ошибка при назначении роли User для {Email}", Input.Email);
+            }
+
+            if (selectedAvatarFile != null)
+            {
+                try
+                {
+                    var avatarPath = await FileUploadService.SaveAvatarAsync(selectedAvatarFile, user.Id);
+                    if (avatarPath != null)
+                    {
+                        user.AvatarUrl = avatarPath;
+                        await UserManager.UpdateAsync(user);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Не удалось сохранить аватарку для {Email}", Input.Email);
+                }
+            }
+
+            // 3. Отправка email
+            try
+            {
+                var userId = await UserManager.GetUserIdAsync(user);
+                var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+                code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+                var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+                    NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                    new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+
+                await EmailSender.SendConfirmationLinkAsync(user, Input.Email, HtmlEncoder.Default.Encode(callbackUrl));
+                Logger.LogInformation("Письмо для подтверждения отправлено на {Email}", Input.Email);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Не удалось отправить письмо подтверждения на {Email}", Input.Email);
+            }
+
+            // 4. Перенаправление
+            if (UserManager.Options.SignIn.RequireConfirmedAccount)
+            {
+                RedirectManager.RedirectTo(
+                    "Account/RegisterConfirmation",
+                    new() { ["email"] = Input.Email, ["returnUrl"] = ReturnUrl });
+                return;
+            }
+
+            await SignInManager.SignInAsync(user, isPersistent: false);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        catch (NavigationException)
+        {
+            // Это нормальное поведение Blazor при редиректе — не ошибка
+            throw; // Пробрасываем дальше, чтобы Blazor его обработал
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Критическая ошибка при регистрации пользователя {Email}", Input.Email);
+            identityErrors = new[] { new IdentityError { Description = "Произошла внутренняя ошибка. Попробуйте позже." } };
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private IUserEmailStore<ApplicationUser> GetEmailStore()
+    {
+        if (!UserManager.SupportsUserEmail)
+        {
+            throw new NotSupportedException("The default UI requires a user store with email support.");
+        }
+        return (IUserEmailStore<ApplicationUser>)UserStore;
+    }
+
+    private void TogglePassword() => showPassword = !showPassword;
+    private void ToggleConfirmPassword() => showConfirmPassword = !showConfirmPassword;
+
+    private async Task OnAvatarChanged(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        if (file == null || file.Size == 0)
+            return;
+
+        try
+        {
+            var buffer = new byte[file.Size];
+            await file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024).ReadAsync(buffer);
+            var base64 = Convert.ToBase64String(buffer);
+            avatarPreview = $"data:{file.ContentType};base64,{base64}";
+            selectedAvatarFile = file;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Ошибка при создании превью аватара");
+            avatarPreview = null;
+            selectedAvatarFile = null;
+        }
+    }
+
+    private void RemoveAvatar()
+    {
+        avatarPreview = null;
+        selectedAvatarFile = null;
+        StateHasChanged();
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Email обязателен")]
+        [EmailAddress(ErrorMessage = "Некорректный формат email")]
+        [Display(Name = "Email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Display(Name = "Отображаемое имя")]
+        [MaxLength(50)]
+        public string? DisplayName { get; set; }
+
+        [Display(Name = "Страна")]
+        public int? CountryId { get; set; }
+
+        [Display(Name = "Дата рождения")]
+        [DataType(DataType.Date)]
+        public DateTime? DateOfBirth { get; set; }
+
+        [Required(ErrorMessage = "Пароль обязателен")]
+        [StringLength(100, ErrorMessage = "Пароль должен быть от {2} до {1} символов", MinimumLength = 6)]
+        [DataType(DataType.Password)]
+        [Display(Name = "Пароль")]
+        public string Password { get; set; } = string.Empty;
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Подтверждение пароля")]
+        [Compare(nameof(Password), ErrorMessage = "Пароли не совпадают")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Необходимо принять условия использования")]
+        [Range(typeof(bool), "true", "true", ErrorMessage = "Необходимо принять условия использования")]
+        public bool AcceptTerms { get; set; }
+    }
+}

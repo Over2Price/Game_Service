@@ -1,0 +1,26 @@
+﻿.publisher-status {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.publisher-status-item {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.publisher-status-label {
+    color: var(--text-secondary);
+    min-width: 100px;
+}
+
+.publisher-status-value {
+    font-weight: 600;
+}
+
+.publisher-actions {
+    display: flex;
+    gap: 0.75rem;
+}

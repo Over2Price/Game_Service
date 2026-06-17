@@ -1,0 +1,267 @@
+﻿@page "/games/{Id:int}"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Microsoft.AspNetCore.Identity
+@inject IServiceScopeFactory ScopeFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>@(game?.Title ?? "Игра") — Game Service</PageTitle>
+
+<div class="game-details-page">
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Загрузка...</p>
+        </div>
+    }
+    else if (game == null)
+    {
+        <div class="empty-state">
+            <i class="bi bi-exclamation-triangle"></i>
+            <h3>Игра не найдена</h3>
+            <a href="/games" class="btn btn-outline-primary">К каталогу</a>
+        </div>
+    }
+    else
+    {
+        <div class="game-block">
+            <a href="/games" class="back-link">
+                <i class="bi bi-arrow-left"></i> К каталогу
+            </a>
+
+            @* ========== НАЗВАНИЕ ========== *@
+            <h1 class="game-title">@game.Title</h1>
+            @* Средний рейтинг *@
+            <div class="game-rating-block">
+                @if (averageRating.HasValue)
+                {
+                    <span class="rating-stars">★</span>
+                    <span class="rating-value">@averageRating.Value.ToString("0.0")</span>
+                    <span class="rating-divider">·</span>
+                    <span class="rating-count">@totalReviews оценок</span>
+                }
+                else
+                {
+                    <span class="rating-no-reviews">Пока нет оценок</span>
+                }
+            </div>
+
+            @* ========== ТРЕЙЛЕР + ОБЛОЖКА + ИНФО ========== *@
+            <div class="game-top">
+                @* Трейлер (или обложка если трейлера нет) *@
+                <div class="game-main-media">
+                    @if (!string.IsNullOrEmpty(GetYouTubeEmbedUrl(game.TrailerUrl)))
+                    {
+                        <div class="video-wrapper">
+                            <iframe src="@GetYouTubeEmbedUrl(game.TrailerUrl!)"
+                                    frameborder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowfullscreen>
+                            </iframe>
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(game.CoverImageUrl))
+                    {
+                        <img src="@game.CoverImageUrl" alt="@game.Title" class="cover-image-large" />
+                    }
+                    else
+                    {
+                        <div class="no-cover-large">
+                            <i class="bi bi-image"></i>
+                            <span>Нет изображения</span>
+                        </div>
+                    }
+                </div>
+
+                @* Правая колонка: обложка (если есть трейлер) + инфо *@
+                @if (!string.IsNullOrEmpty(GetYouTubeEmbedUrl(game.TrailerUrl)))
+                {
+                    <div class="game-side">
+                        @* Обложка *@
+                        @if (!string.IsNullOrEmpty(game.CoverImageUrl))
+                        {
+                            <img src="@game.CoverImageUrl" alt="@game.Title" class="cover-image-side" />
+                        }
+                        else
+                        {
+                            <div class="no-cover-side">
+                                <i class="bi bi-image"></i>
+                            </div>
+                        }
+
+                        @* Инфо под обложкой *@
+                        <div class="game-info-side">
+                            <div class="info-row">
+                                <i class="bi bi-building"></i>
+                                <span>@(game.Publisher?.GamePublisherName ?? "Неизвестный издатель")</span>
+                            </div>
+                            <div class="info-row">
+                                <i class="bi bi-calendar"></i>
+                                <span>@(game.ReleaseDate?.ToString("dd.MM.yyyy") ?? "Дата не указана")</span>
+                            </div>
+                            <div class="info-row">
+                                <i class="bi bi-tag"></i>
+                                <span>@(game.Price.HasValue ? $"{game.Price:C}" : "Бесплатно")</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @* Нет трейлера — инфо справа от обложки *@
+                    <div class="game-side game-side-info-only">
+                        <div class="game-info-side">
+                            <div class="info-row">
+                                <i class="bi bi-building"></i>
+                                <span>@(game.Publisher?.GamePublisherName ?? "Неизвестный издатель")</span>
+                            </div>
+                            <div class="info-row">
+                                <i class="bi bi-calendar"></i>
+                                <span>@(game.ReleaseDate?.ToString("dd.MM.yyyy") ?? "Дата не указана")</span>
+                            </div>
+                            <div class="info-row">
+                                <i class="bi bi-tag"></i>
+                                <span>@(game.Price.HasValue ? $"{game.Price:C}" : "Бесплатно")</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* ========== ОПИСАНИЕ ========== *@
+            @if (!string.IsNullOrEmpty(game.Description))
+            {
+                <p class="game-description">@game.Description</p>
+            }
+
+            @* ========== ЖАНРЫ ========== *@
+            @if (game.GameCategories.Any())
+            {
+                <div class="game-categories">
+                    @foreach (var gc in game.GameCategories)
+                    {
+                        <span class="chip">@gc.Category.Name</span>
+                    }
+                </div>
+            }
+
+            @* ========== ОТЗЫВЫ ========== *@
+            @* Мой отзыв *@
+            <div class="review-section">
+                <h2>
+                    <i class="bi bi-pencil-square"></i>
+                    @(userReview != null ? "Мой отзыв" : "Оставить отзыв")
+                </h2>
+
+                @if (!isAuthenticated)
+                {
+                    <p class="review-login-hint">
+                        <a href="/Account/Login">Войдите</a>, чтобы оставить отзыв.
+                    </p>
+                }
+                else if (userReview != null && !isEditing)
+                {
+                    <div class="my-review-card">
+                        <div class="review-header">
+                            <span class="review-rating">@userReview.Rating/10</span>
+                            <span class="review-title-text">@userReview.Title</span>
+                            <span class="review-date">@userReview.CreatedAt.ToString("dd.MM.yyyy")</span>
+                        </div>
+                        <p class="review-content-text">@userReview.Content</p>
+                        <div class="review-actions">
+                            <span class="review-recommend @(userReview.IsRecommended ? "recommend-yes" : "recommend-no")">
+                                <i class="bi bi-hand-thumbs-@(userReview.IsRecommended ? "up" : "down")"></i>
+                                @(userReview.IsRecommended ? "Рекомендую" : "Не рекомендую")
+                            </span>
+                            <button class="btn btn-outline-primary btn-sm" @onclick="StartEditing">
+                                <i class="bi bi-pencil"></i> Редактировать
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="DeleteReview">
+                                <i class="bi bi-trash"></i> Удалить
+                            </button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <EditForm Model="reviewModel" OnValidSubmit="SubmitReview" FormName="review-form">
+                        <div class="review-form">
+                            <div class="review-form-row">
+                                <div class="form-group" style="width: 100px;">
+                                    <label class="form-label">Оценка</label>
+                                    <InputNumber @bind-Value="reviewModel.Rating" class="form-control" min="1" max="10" />
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label class="form-label">Заголовок</label>
+                                    <InputText @bind-Value="reviewModel.Title" class="form-control" placeholder="Кратко..." />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Отзыв</label>
+                                <InputTextArea @bind-Value="reviewModel.Content" class="form-control" rows="4" placeholder="Ваше мнение об игре..." />
+                            </div>
+                            <div class="review-form-actions">
+                                <label class="checkbox-label">
+                                    <InputCheckbox @bind-Value="reviewModel.IsRecommended" />
+                                    <span>Рекомендую игру</span>
+                                </label>
+                                <div class="review-form-buttons">
+                                    @if (isEditing)
+                                    {
+                                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="CancelEditing">Отмена</button>
+                                    }
+                                    <button type="submit" class="btn btn-primary btn-sm" disabled="@isSubmittingReview">
+                                        @(isSubmittingReview ? "Сохранение..." : (isEditing ? "Сохранить" : "Опубликовать"))
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </EditForm>
+                }
+            </div>
+
+            @* Чужие отзывы *@
+            <div class="review-section">
+                <h2>
+                    <i class="bi bi-chat-dots"></i>
+                    Отзывы игроков (@otherReviews.Count)
+                </h2>
+                @if (!otherReviews.Any())
+                {
+                    <p class="text-muted">Отзывов пока нет. Будьте первым!</p>
+                }
+                else
+                {
+                    @foreach (var review in otherReviews)
+                    {
+                        <div class="review-card">
+                            <div class="review-header">
+                                <span class="review-author">
+                                    <i class="bi bi-person-circle"></i>
+                                    @(review.User?.DisplayName ?? review.User?.UserName ?? "Пользователь")
+                                </span>
+                                <span class="review-rating">@review.Rating/10</span>
+                                <span class="review-date">@review.CreatedAt.ToString("dd.MM.yyyy")</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(review.Title))
+                            {
+                                <h4 class="review-title-text">@review.Title</h4>
+                            }
+                            <p class="review-content-text">@review.Content</p>
+                            <div class="review-footer">
+                                <span class="review-recommend @(review.IsRecommended ? "recommend-yes" : "recommend-no")">
+                                    <i class="bi bi-hand-thumbs-@(review.IsRecommended ? "up" : "down")"></i>
+                                    @(review.IsRecommended ? "Рекомендует" : "Не рекомендует")
+                                </span>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>

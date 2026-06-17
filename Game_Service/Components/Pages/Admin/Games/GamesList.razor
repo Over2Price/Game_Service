@@ -1,0 +1,104 @@
+﻿@page "/Admin/Games"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@attribute [Authorize(Roles = "Admin")]
+@inject IServiceScopeFactory ScopeFactory
+
+<PageTitle>Управление играми — Админ-панель</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-header">
+        <h1>
+            <i class="bi bi-controller"></i>
+            Управление играми
+        </h1>
+        <p class="text-muted">Просмотр и редактирование всех игр в каталоге</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Загрузка игр...</p>
+        </div>
+    }
+    else if (!games.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-controller"></i>
+            <h3>Игры не найдены</h3>
+            <p>В каталоге пока нет игр</p>
+        </div>
+    }
+    else
+    {
+        <div class="games-grid">
+            @foreach (var game in games)
+            {
+                <div class="game-card">
+                    <div class="game-card-image">
+                        @if (!string.IsNullOrEmpty(game.CoverImageUrl))
+                        {
+                            <img src="@game.CoverImageUrl" alt="@game.Title" />
+                        }
+                        else
+                        {
+                            <div class="game-card-no-image">
+                                <i class="bi bi-image"></i>
+                            </div>
+                        }
+                    </div>
+                    <div class="game-card-body">
+                        <h3>@game.Title</h3>
+                        <div class="game-card-meta">
+                            <span class="game-price">@(game.Price.HasValue ? $"{game.Price:C}" : "Бесплатно")</span>
+                            <span class="game-date">@(game.ReleaseDate?.ToString("dd.MM.yyyy") ?? "—")</span>
+                        </div>
+                        <p class="game-card-desc">@Truncate(game.Description, 100)</p>
+                        <a href="/Admin/Games/@game.Id" class="btn btn-primary btn-sm">
+                            <i class="bi bi-pencil"></i>
+                            Редактировать
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<Game> games = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGames();
+    }
+
+    private async Task LoadGames()
+    {
+        isLoading = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            games = await dbContext.Games
+                .Include(g => g.Publisher)
+                .OrderByDescending(g => g.CreatedAt)
+                .ToListAsync();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string Truncate(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text)) return "—";
+        return text.Length <= maxLength ? text : text[..maxLength] + "...";
+    }
+}

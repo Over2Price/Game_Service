@@ -1,0 +1,87 @@
+﻿@page "/Account/ConfirmEmailChange"
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using Game_Service.Data.Models
+@using System.Text
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+
+<PageTitle>Подтверждение смены email — Game Service</PageTitle>
+
+<div class="register-page">
+    <div class="register-container">
+        <div class="register-decoration">
+            <div class="decoration-content">
+                <div class="decoration-icon">
+                    <i class="bi bi-@(isSuccess ? "check-circle" : "exclamation-circle")"></i>
+                </div>
+                <h2>@(isSuccess ? "Готово!" : "Ошибка")</h2>
+                <p>@(isSuccess ? "Ваш email успешно изменён." : "Не удалось подтвердить смену email.")</p>
+            </div>
+        </div>
+        <div class="register-form-section">
+            <div class="confirmation-content">
+                @if (isLoading)
+                {
+                    <span class="spinner-large"></span>
+                    <p>Подтверждение...</p>
+                }
+                else
+                {
+                    <p>@statusMessage</p>
+                    <a href="/Account/Manage" class="btn btn-primary">
+                        <i class="bi bi-gear"></i> В личный кабинет
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] private string? UserId { get; set; }
+    [SupplyParameterFromQuery] private string? Email { get; set; }
+    [SupplyParameterFromQuery] private string? Code { get; set; }
+
+    private bool isLoading = true;
+    private bool isSuccess;
+    private string statusMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Code))
+        {
+            isSuccess = false;
+            statusMessage = "Неверная ссылка.";
+            isLoading = false;
+            return;
+        }
+
+        var user = await UserManager.FindByIdAsync(UserId);
+        if (user == null)
+        {
+            isSuccess = false;
+            statusMessage = "Пользователь не найден.";
+            isLoading = false;
+            return;
+        }
+
+        var codeBytes = WebEncoders.Base64UrlDecode(Code);
+        var codeString = Encoding.UTF8.GetString(codeBytes);
+
+        var result = await UserManager.ChangeEmailAsync(user, Email, codeString);
+        if (result.Succeeded)
+        {
+            await UserManager.SetUserNameAsync(user, Email);
+            isSuccess = true;
+            statusMessage = $"Email изменён на {Email}.";
+        }
+        else
+        {
+            isSuccess = false;
+            statusMessage = result.Errors.FirstOrDefault()?.Description ?? "Ошибка при смене email.";
+        }
+
+        isLoading = false;
+    }
+}

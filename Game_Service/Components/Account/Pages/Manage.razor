@@ -1,0 +1,146 @@
+﻿@page "/Account/Manage"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Microsoft.AspNetCore.Identity
+@using Game_Service.Components.Pages
+
+@attribute [Authorize]
+@inject IServiceScopeFactory ScopeFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Личный кабинет — Game Service</PageTitle>
+
+<div class="profile-page">
+    <aside class="profile-sidebar">
+        <div class="profile-sidebar-header">
+            <div class="profile-avatar">
+                @if (!string.IsNullOrEmpty(currentUser?.AvatarUrl))
+                {
+                    <img src="@currentUser.AvatarUrl" alt="Avatar" />
+                }
+                else
+                {
+                    <span class="profile-avatar-placeholder">
+                        @(currentUser?.DisplayName?.FirstOrDefault() ?? currentUser?.Email?.FirstOrDefault() ?? '?')
+                    </span>
+                }
+            </div>
+            <div class="profile-sidebar-name">
+                @(currentUser?.DisplayName ?? currentUser?.Email ?? "Пользователь")
+            </div>
+        </div>
+
+        <nav class="profile-nav">
+            <button class="profile-nav-link @(currentTab == "profile" ? "active" : "")" 
+                    @onclick='() => SwitchTab("profile")'>
+                <i class="bi bi-person"></i>
+                <span>Профиль</span>
+            </button>
+
+            <button class="profile-nav-link @(currentTab == "activity" ? "active" : "")"
+                    @onclick='() => SwitchTab("activity")'>
+                <i class="bi bi-clock-history"></i>
+                <span>Активность</span>
+            </button>
+
+            <button class="profile-nav-link @(currentTab == "security" ? "active" : "")" 
+                    @onclick='() => SwitchTab("security")'>
+                <i class="bi bi-shield-lock"></i>
+                <span>Безопасность</span>
+            </button>
+
+            <button class="profile-nav-link @(currentTab == "publisher" ? "active" : "")" 
+                    @onclick='() => SwitchTab("publisher")'>
+                <i class="bi bi-building"></i>
+                <span>Издатель</span>
+            </button>
+        </nav>
+
+        <div class="profile-sidebar-footer">
+            <a href="/games" class="profile-back-link">
+                <i class="bi bi-arrow-left"></i>
+                <span>К каталогу</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="profile-content">
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <span class="spinner-large"></span>
+                <p>Загрузка...</p>
+            </div>
+        }
+        else if (currentUser == null)
+        {
+            <div class="empty-state">
+                <i class="bi bi-exclamation-triangle"></i>
+                <h3>Пользователь не найден</h3>
+            </div>
+        }
+        else
+        {
+            @switch (currentTab)
+            {
+                case "profile":
+                    <ProfileTab CurrentUser="currentUser" OnProfileUpdated="HandleProfileUpdated" />
+                    break;
+                case "activity":
+                    <ActivityTab CurrentUser="currentUser" />
+                    break;
+                case "security":
+                    <SecurityTab CurrentUser="currentUser" />
+                    break;
+                case "publisher":
+                    <PublisherTab CurrentUser="currentUser" OnUserUpdated="HandleProfileUpdated" />
+                    break;
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private string currentTab = "profile";
+    private bool isLoading = true;
+    internal ApplicationUser? currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var appUser = await UserManager.GetUserAsync(user);
+            if (appUser != null)
+            {
+                using var scope = ScopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                currentUser = await dbContext.Users
+                    .Include(u => u.Country)
+                    .Include(u => u.Publisher)
+                    .FirstOrDefaultAsync(u => u.Id == appUser.Id);
+            }
+        }
+
+        isLoading = false;
+    }
+
+    private void SwitchTab(string tab)
+    {
+        currentTab = tab;
+        StateHasChanged();
+    }
+
+    private void HandleProfileUpdated(ApplicationUser updatedUser)
+    {
+        currentUser = updatedUser;
+        StateHasChanged();
+    }
+}

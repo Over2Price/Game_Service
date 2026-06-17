@@ -1,0 +1,343 @@
+﻿@page "/Admin/Games/{Id:int}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using System.ComponentModel.DataAnnotations
+@using System.ComponentModel.DataAnnotations.Schema
+
+
+@attribute [Authorize(Roles = "Admin")]
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager NavigationManager
+@inject ILogger<GameEdit> Logger
+
+<PageTitle>Редактирование игры — Админ-панель</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-header">
+        <a href="/Admin/Games" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-arrow-left"></i>
+            Назад к списку
+        </a>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Загрузка игры...</p>
+        </div>
+    }
+    else if (game == null)
+    {
+        <div class="empty-state">
+            <i class="bi bi-exclamation-triangle"></i>
+            <h3>Игра не найдена</h3>
+            <p>Игра с таким ID не существует</p>
+        </div>
+    }
+    else
+    {
+        <div class="edit-game-layout">
+            @* Обложка *@
+            <div class="edit-game-cover">
+                @if (!string.IsNullOrEmpty(coverPreview))
+                {
+                    <img src="@coverPreview" alt="Preview" />
+                }
+                else if (!string.IsNullOrEmpty(game.CoverImageUrl))
+                {
+                    <img src="@game.CoverImageUrl" alt="@game.Title" />
+                }
+                else
+                {
+                    <div class="no-cover">
+                        <i class="bi bi-image"></i>
+                        <span>Нет обложки</span>
+                    </div>
+                }
+                <label class="btn btn-outline-primary btn-sm" for="edit-cover-input" style="margin-top: 0.75rem;">
+                    <i class="bi bi-upload"></i>
+                    Загрузить обложку
+                </label>
+                <InputFile id="edit-cover-input"
+                           class="hidden-file-input"
+                           accept="image/jpeg,image/png,image/webp"
+                           OnChange="OnCoverChanged" />
+            </div>
+
+            @* Форма редактирования *@
+            <div class="edit-game-form">
+                <h1>
+                    <i class="bi bi-pencil-square"></i>
+                    Редактирование
+                </h1>
+
+                <EditForm Model="editModel" OnValidSubmit="SaveGame" FormName="edit-game">
+                    <DataAnnotationsValidator />
+
+                    <div class="form-group">
+                        <label class="form-label">Название</label>
+                        <InputText @bind-Value="editModel.Title" class="form-control" />
+                        <ValidationMessage For="() => editModel.Title" class="validation-message" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Описание</label>
+                        <InputTextArea @bind-Value="editModel.Description" class="form-control" rows="5" />
+                        <ValidationMessage For="() => editModel.Description" class="validation-message" />
+                    </div>
+
+                    <div class="form-row form-row-2">
+                        <div class="form-group">
+                            <label class="form-label">Цена (₽)</label>
+                            <InputNumber @bind-Value="editModel.Price" class="form-control" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Дата релиза</label>
+                            <InputDate @bind-Value="editModel.ReleaseDate" class="form-control" />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Ссылка на трейлер</label>
+                        <InputText @bind-Value="editModel.TrailerUrl" class="form-control" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Издатель</label>
+                        <InputSelect @bind-Value="editModel.PublisherId" class="form-select">
+                            <option value="">— Без издателя —</option>
+                            @foreach (var pub in publishers)
+                            {
+                                <option value="@pub.Id">@pub.GamePublisherName</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner"></span>
+                                <span>Сохранение...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check-lg"></i>
+                                <span>Сохранить</span>
+                            }
+                        </button>
+
+                        <button type="button" class="btn btn-danger"
+                                @onclick="DeleteGame"
+                                disabled="@isDeleting">
+                            @if (isDeleting)
+                            {
+                                <span class="spinner"></span>
+                                <span>Удаление...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-trash"></i>
+                                <span>Удалить игру</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+
+                @if (!string.IsNullOrEmpty(statusMessage))
+                {
+                    <div class="alert @(isSuccess ? "alert-success" : "alert-error") fade-in" style="margin-top: 1.5rem;">
+                        <i class="bi bi-@(isSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                        <span>@statusMessage</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isDeleting;
+    private bool isSuccess;
+    private string? statusMessage;
+
+    private Game? game;
+    private EditGameModel editModel = new();
+    private List<GamePublisher> publishers = new();
+    private string? coverPreview;
+    private IBrowserFile? selectedCoverFile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGame();
+    }
+
+    private async Task LoadGame()
+    {
+        isLoading = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            game = await dbContext.Games.FindAsync(Id);
+            publishers = await dbContext.GamePublishers.OrderBy(p => p.GamePublisherName).ToListAsync();
+
+            if (game != null)
+            {
+                editModel = new EditGameModel
+                {
+                    Title = game.Title,
+                    Description = game.Description,
+                    Price = game.Price,
+                    ReleaseDate = game.ReleaseDate,
+                    TrailerUrl = game.TrailerUrl,
+                    PublisherId = game.PublisherId
+                };
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnCoverChanged(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null || file.Size == 0) return;
+
+        try
+        {
+            var buffer = new byte[file.Size];
+            await file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024).ReadAsync(buffer);
+            var base64 = Convert.ToBase64String(buffer);
+            coverPreview = null;
+            StateHasChanged();
+            coverPreview = $"data:{file.ContentType};base64,{base64}";
+            selectedCoverFile = file;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Ошибка при загрузке обложки");
+        }
+    }
+
+    private async Task SaveGame()
+    {
+        if (game == null) return;
+
+        isSaving = true;
+        statusMessage = null;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var entity = await dbContext.Games.FindAsync(Id);
+
+            if (entity == null)
+            {
+                statusMessage = "Игра не найдена.";
+                isSuccess = false;
+                return;
+            }
+
+            entity.Title = editModel.Title.Trim();
+            entity.Description = editModel.Description?.Trim();
+            entity.Price = editModel.Price;
+            entity.ReleaseDate = editModel.ReleaseDate;
+            entity.TrailerUrl = editModel.TrailerUrl?.Trim();
+            entity.PublisherId = editModel.PublisherId;
+            entity.UpdatedAt = DateTime.UtcNow;
+
+            // Обложка
+            if (selectedCoverFile != null)
+            {
+                var fileName = $"game_{Guid.NewGuid():N}{Path.GetExtension(selectedCoverFile.Name)}";
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games");
+                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+                var filePath = Path.Combine(uploadsFolder, fileName);
+                await using var stream = new FileStream(filePath, FileMode.Create);
+                await selectedCoverFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024).CopyToAsync(stream);
+                entity.CoverImageUrl = $"/uploads/games/{fileName}";
+            }
+
+            await dbContext.SaveChangesAsync();
+
+            game = entity;
+            statusMessage = "Игра сохранена.";
+            isSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при сохранении игры");
+            statusMessage = $"Ошибка: {ex.Message}";
+            isSuccess = false;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteGame()
+    {
+        if (game == null) return;
+
+        isDeleting = true;
+        statusMessage = null;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var entity = await dbContext.Games.FindAsync(Id);
+
+            if (entity != null)
+            {
+                dbContext.Games.Remove(entity);
+                await dbContext.SaveChangesAsync();
+                NavigationManager.NavigateTo("/Admin/Games");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при удалении игры");
+            statusMessage = $"Ошибка: {ex.Message}";
+            isSuccess = false;
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private class EditGameModel
+    {
+        [Required(ErrorMessage = "Название обязательно")]
+        [MaxLength(200)]
+        public string Title { get; set; } = string.Empty;
+
+        [MaxLength(2000)]
+        public string? Description { get; set; }
+
+        public decimal? Price { get; set; }
+        public DateTime? ReleaseDate { get; set; }
+
+        [MaxLength(500)]
+        public string? TrailerUrl { get; set; }
+
+        public int? PublisherId { get; set; }
+    }
+}

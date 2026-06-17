@@ -1,0 +1,537 @@
+﻿@page "/Admin/Users"
+
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Game_Service.Services
+@using Microsoft.AspNetCore.Identity
+
+@attribute [Authorize(Roles = "Admin")]
+@inject IServiceScopeFactory ScopeFactory
+@inject AdminAuthorizationService AdminAuth
+@inject UserManager<ApplicationUser> UserManager
+
+<PageTitle>Управление пользователями — Админ-панель</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-header">
+        <h1>
+            <i class="bi bi-people"></i>
+            Управление пользователями
+        </h1>
+        <p class="text-muted">Поиск, просмотр и редактирование аккаунтов пользователей</p>
+    </div>
+
+    @* Строка поиска и фильтры *@
+    <div class="search-section">
+        <div class="search-input-wrapper">
+            <i class="bi bi-search"></i>
+            <input type="text"
+                   class="form-control"
+                   placeholder="Поиск по имени, email или ID..."
+                   @bind="searchQuery"
+                   @bind:event="oninput"
+                   @onkeyup="OnSearchKeyUp" />
+            @if (!string.IsNullOrEmpty(searchQuery))
+            {
+                <button class="search-clear" @onclick="ClearSearch">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            }
+        </div>
+
+        <div class="search-filters">
+            <select class="form-select" @bind="statusFilter" @bind:after="OnFilterChanged">
+                <option value="">Все статусы</option>
+                <option value="Active">Активные</option>
+                <option value="Suspended">Приостановленные</option>
+                <option value="Banned">Забаненные</option>
+            </select>
+
+            <select class="form-select" @bind="publisherFilter" @bind:after="OnFilterChanged">
+                <option value="">Все пользователи</option>
+                <option value="publisher">Представители издателей</option>
+                <option value="verified">Верифицированные издатели</option>
+                <option value="unverified">Неверифицированные издатели</option>
+            </select>
+
+            <select class="form-select" @bind="emailFilter" @bind:after="OnFilterChanged">
+                <option value="">Email</option>
+                <option value="confirmed">Подтверждён</option>
+                <option value="unconfirmed">Не подтверждён</option>
+            </select>
+        </div>
+    </div>
+
+    @* Таблица пользователей *@
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Загрузка пользователей...</p>
+        </div>
+    }
+    else if (filteredUsers.Count == 0)
+    {
+        <div class="empty-state">
+            <i class="bi bi-people"></i>
+            <h3>Пользователи не найдены</h3>
+            <p>Попробуйте изменить параметры поиска</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th @onclick="() => SortBy(nameof(UserEditItem.Original.Id))" class="sortable">
+                            ID @SortIcon(nameof(UserEditItem.Original.Id))
+                        </th>
+                        <th @onclick="() => SortBy(nameof(UserEditItem.Original.DisplayName))" class="sortable">
+                            Имя @SortIcon(nameof(UserEditItem.Original.DisplayName))
+                        </th>
+                        <th @onclick="() => SortBy(nameof(UserEditItem.Original.Email))" class="sortable">
+                            Email @SortIcon(nameof(UserEditItem.Original.Email))
+                        </th>
+                        <th>Подтв.</th>
+                        <th @onclick="() => SortBy(nameof(UserEditItem.Original.CreatedAt))" class="sortable">
+                            Создан @SortIcon(nameof(UserEditItem.Original.CreatedAt))
+                        </th>
+                        <th>Дата рожд.</th>
+                        <th>Издатель</th>
+                        <th>Вериф.</th>
+                        <th>Роль</th>
+                        <th>Статус</th>
+                        <th>Страна</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in paginatedUsers)
+                    {
+                        <tr class="@(item.HasChanges ? "row-changed" : "")">
+                            @* ID — только для чтения *@
+                            <td>
+                                <span class="user-id">@item.Original.Id[..8]</span>
+                            </td>
+
+                            @* DisplayName — редактируемый *@
+                            <td>
+                                <input type="text" class="form-control form-control-sm"
+                                       @bind="item.DisplayName"
+                                       @bind:event="oninput"
+                                       @bind:after="() => item.HasChanges = true" />
+                            </td>
+
+                            @* Email — редактируемый *@
+                            <td>
+                                <input type="email" class="form-control form-control-sm"
+                                       @bind="item.Email"
+                                       @bind:event="oninput"
+                                       @bind:after="() => item.HasChanges = true" />
+                            </td>
+
+                            @* EmailConfirmed — чекбокс *@
+                            <td>
+                                <input type="checkbox" class="form-check-input"
+                                       @bind="item.EmailConfirmed"
+                                       @bind:after="() => item.HasChanges = true" />
+                            </td>
+
+                            @* CreatedAt — только для чтения *@
+                            <td>
+                                <span class="date-text">@item.Original.CreatedAt.ToString("dd.MM.yyyy")</span>
+                            </td>
+
+                            @* DateOfBirth — редактируемый *@
+                            <td>
+                                <input type="date" class="form-control form-control-sm"
+                                       @bind="item.DateOfBirthValue"
+                                       @bind:event="onchange"
+                                       @bind:after="() => item.HasChanges = true" />
+                            </td>
+
+                            @* IsPublisherRepresentative — чекбокс *@
+                            <td>
+                                <input type="checkbox" class="form-check-input"
+                                       @bind="item.IsPublisherRepresentative"
+                                       @bind:after="() => item.HasChanges = true" />
+                            </td>
+
+                            @* IsPublisherVerified — чекбокс *@
+                            <td>
+                                @if (item.IsPublisherRepresentative)
+                                {
+                                    <input type="checkbox" class="form-check-input"
+                                           @bind="item.IsPublisherVerified"
+                                           @bind:after="() => item.HasChanges = true" />
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+
+                            @* PublisherRole — редактируемый *@
+                            <td>
+                                <input type="text" class="form-control form-control-sm"
+                                       @bind="item.PublisherRole"
+                                       @bind:event="oninput"
+                                       @bind:after="() => item.HasChanges = true" />
+                            </td>
+
+                            @* Status — выпадающий список *@
+                            <td>
+                                <select class="form-select form-select-sm"
+                                        @bind="item.Status"
+                                        @bind:after="() => item.HasChanges = true">
+                                    <option value="Active">Активен</option>
+                                    <option value="Suspended">Приостановлен</option>
+                                    <option value="Banned">Забанен</option>
+                                    <option value="Deleted">Удалён</option>
+                                </select>
+                            </td>
+
+                            @* Country — выпадающий список *@
+                            <td>
+                                <select class="form-select form-select-sm"
+                                        @bind="item.CountryId"
+                                        @bind:after="() => item.HasChanges = true">
+                                    <option value="">—</option>
+                                    @foreach (var country in countries)
+                                    {
+                                        <option value="@country.Id">@country.Name</option>
+                                    }
+                                </select>
+                            </td>
+
+                            @* Кнопка сохранения *@
+                            <td>
+                                <button class="btn btn-sm btn-primary"
+                                        @onclick="() => SaveUser(item)"
+                                        disabled="@(!item.HasChanges || item.IsSaving)">
+                                    @if (item.IsSaving)
+                                    {
+                                        <span class="spinner-small"></span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-check-lg"></i>
+                                        <span>Сохранить</span>
+                                    }
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* Пагинация *@
+        <div class="pagination">
+            <span class="pagination-info">
+                Показано @((currentPage - 1) * pageSize + 1)–@Math.Min(currentPage * pageSize, filteredUsers.Count)
+                из @filteredUsers.Count пользователей
+            </span>
+            <div class="pagination-controls">
+                <button @onclick="() => ChangePage(-1)"
+                        disabled="@(currentPage <= 1)"
+                        class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <span class="page-number">@currentPage / @totalPages</span>
+                <button @onclick="() => ChangePage(1)"
+                        disabled="@(currentPage >= totalPages)"
+                        class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+
+        @* Сообщение о результате *@
+        @if (!string.IsNullOrEmpty(saveMessage))
+        {
+            <div class="alert @(saveSuccess ? "alert-success" : "alert-error") fade-in">
+                <i class="bi bi-@(saveSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                <span>@saveMessage</span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string searchQuery = string.Empty;
+    private string statusFilter = string.Empty;
+    private string publisherFilter = string.Empty;
+    private string emailFilter = string.Empty;
+    private string sortColumn = nameof(UserListItem.Id);
+    private bool sortAscending = true;
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private bool isLoading = true;
+    private string? saveMessage;
+    private bool saveSuccess;
+
+    private List<UserEditItem> allUsers = new();
+    private List<UserEditItem> filteredUsers = new();
+    private List<UserEditItem> paginatedUsers = new();
+    private List<Country> countries = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCountries();
+        await LoadUsers();
+    }
+
+    private async Task LoadCountries()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        countries = await dbContext.Countries
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+    }
+
+    private async Task LoadUsers()
+    {
+        isLoading = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var users = await dbContext.Users
+                .Include(u => u.Country)
+                .Select(u => new UserListItem
+                {
+                    Id = u.Id,
+                    DisplayName = u.DisplayName,
+                    Email = u.Email ?? string.Empty,
+                    EmailConfirmed = u.EmailConfirmed,
+                    CreatedAt = u.CreatedAt,
+                    DateOfBirth = u.DateOfBirth,
+                    IsPublisherRepresentative = u.IsPublisherRepresentative,
+                    IsPublisherVerified = u.IsPublisherVerified,
+                    PublisherRole = u.PublisherRole,
+                    Status = u.Status,
+                    CountryId = u.CountryId,
+                    CountryName = u.Country != null ? u.Country.Name : null
+                })
+                .ToListAsync();
+
+            allUsers = users.Select(u => new UserEditItem(u)).ToList();
+            ApplyFilters();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var query = allUsers.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var q = searchQuery.ToLower();
+            query = query.Where(u =>
+                (u.DisplayName != null && u.DisplayName.ToLower().Contains(q)) ||
+                u.Email.ToLower().Contains(q) ||
+                u.Original.Id.ToLower().Contains(q));
+        }
+
+        if (!string.IsNullOrEmpty(statusFilter))
+            query = query.Where(u => u.Status.ToString() == statusFilter);
+
+        if (publisherFilter == "publisher")
+            query = query.Where(u => u.IsPublisherRepresentative);
+        else if (publisherFilter == "verified")
+            query = query.Where(u => u.IsPublisherRepresentative && u.IsPublisherVerified);
+        else if (publisherFilter == "unverified")
+            query = query.Where(u => u.IsPublisherRepresentative && !u.IsPublisherVerified);
+
+        if (emailFilter == "confirmed")
+            query = query.Where(u => u.EmailConfirmed);
+        else if (emailFilter == "unconfirmed")
+            query = query.Where(u => !u.EmailConfirmed);
+
+        query = sortColumn switch
+        {
+            nameof(UserListItem.Id) => sortAscending ? query.OrderBy(u => u.Original.Id) : query.OrderByDescending(u => u.Original.Id),
+            nameof(UserListItem.DisplayName) => sortAscending ? query.OrderBy(u => u.DisplayName) : query.OrderByDescending(u => u.DisplayName),
+            nameof(UserListItem.Email) => sortAscending ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email),
+            nameof(UserListItem.CreatedAt) => sortAscending ? query.OrderBy(u => u.Original.CreatedAt) : query.OrderByDescending(u => u.Original.CreatedAt),
+            _ => query.OrderBy(u => u.Original.Id)
+        };
+
+        filteredUsers = query.ToList();
+        currentPage = 1;
+        UpdatePage();
+    }
+
+    private void UpdatePage()
+    {
+        paginatedUsers = filteredUsers
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+        StateHasChanged();
+    }
+
+    private int totalPages => Math.Max(1, (int)Math.Ceiling((double)filteredUsers.Count / pageSize));
+
+    private void OnSearchKeyUp(KeyboardEventArgs e) => ApplyFilters();
+    private void OnFilterChanged() => ApplyFilters();
+
+    private void ClearSearch()
+    {
+        searchQuery = string.Empty;
+        ApplyFilters();
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        ApplyFilters();
+    }
+
+    private MarkupString SortIcon(string column)
+    {
+        if (sortColumn != column)
+            return new MarkupString("<i class='bi bi-arrow-down-up text-muted'></i>");
+        return sortAscending
+            ? new MarkupString("<i class='bi bi-sort-down'></i>")
+            : new MarkupString("<i class='bi bi-sort-up'></i>");
+    }
+
+    private void ChangePage(int delta)
+    {
+        currentPage = Math.Clamp(currentPage + delta, 1, totalPages);
+        UpdatePage();
+    }
+
+    private async Task SaveUser(UserEditItem item)
+    {
+        if (!item.HasChanges) return;
+
+        item.IsSaving = true;
+        saveMessage = null;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var user = await dbContext.Users.FindAsync(item.Original.Id);
+            if (user == null)
+            {
+                saveMessage = "Пользователь не найден.";
+                saveSuccess = false;
+                return;
+            }
+
+            // Применяем изменения
+            user.DisplayName = item.DisplayName;
+            user.Email = item.Email;
+            user.EmailConfirmed = item.EmailConfirmed;
+            user.DateOfBirth = item.DateOfBirth;
+            user.IsPublisherRepresentative = item.IsPublisherRepresentative;
+            user.IsPublisherVerified = item.IsPublisherRepresentative && item.IsPublisherVerified;
+            user.PublisherRole = item.PublisherRole;
+            user.Status = item.Status;
+            user.CountryId = item.CountryId;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await dbContext.SaveChangesAsync();
+
+            // Обновляем оригинал в локальном списке
+            item.Original.DisplayName = item.DisplayName;
+            item.Original.Email = item.Email;
+            item.Original.EmailConfirmed = item.EmailConfirmed;
+            item.Original.DateOfBirth = item.DateOfBirth;
+            item.Original.IsPublisherRepresentative = item.IsPublisherRepresentative;
+            item.Original.IsPublisherVerified = item.IsPublisherVerified;
+            item.Original.PublisherRole = item.PublisherRole;
+            item.Original.Status = item.Status;
+            item.Original.CountryId = item.CountryId;
+
+            item.HasChanges = false;
+            saveMessage = $"Пользователь {item.DisplayName ?? item.Email} успешно сохранён.";
+            saveSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"Ошибка: {ex.Message}";
+            saveSuccess = false;
+        }
+        finally
+        {
+            item.IsSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private class UserEditItem
+    {
+        public UserListItem Original { get; }
+        public bool HasChanges { get; set; }
+        public bool IsSaving { get; set; }
+
+        public string DisplayName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public bool EmailConfirmed { get; set; }
+        public bool IsPublisherRepresentative { get; set; }
+        public bool IsPublisherVerified { get; set; }
+        public string PublisherRole { get; set; } = string.Empty;
+        public UserStatus Status { get; set; }
+        public int? CountryId { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+
+        public DateTime DateOfBirthValue
+        {
+            get => DateOfBirth ?? DateTime.Today;
+            set => DateOfBirth = value;
+        }
+
+        public UserEditItem(UserListItem original)
+        {
+            Original = original;
+            DisplayName = original.DisplayName ?? string.Empty;
+            Email = original.Email;
+            EmailConfirmed = original.EmailConfirmed;
+            IsPublisherRepresentative = original.IsPublisherRepresentative;
+            IsPublisherVerified = original.IsPublisherVerified;
+            PublisherRole = original.PublisherRole ?? string.Empty;
+            Status = original.Status;
+            CountryId = original.CountryId;
+            DateOfBirth = original.DateOfBirth;
+        }
+    }
+
+    private class UserListItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string? DisplayName { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public bool EmailConfirmed { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public bool IsPublisherRepresentative { get; set; }
+        public bool IsPublisherVerified { get; set; }
+        public string? PublisherRole { get; set; }
+        public UserStatus Status { get; set; }
+        public int? CountryId { get; set; }
+        public string? CountryName { get; set; }
+    }
+}

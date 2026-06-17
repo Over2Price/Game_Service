@@ -1,0 +1,70 @@
+﻿@page "/Admin"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>Админ-панель — Game Service</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-header">
+        <h1>
+            <i class="bi bi-shield-lock"></i>
+            Админ-панель
+        </h1>
+        <p class="text-muted">Управление пользователями, издателями и играми</p>
+    </div>
+
+    <div class="admin-cards">
+        @* Пользователи *@
+        <div class="admin-card">
+            <div class="admin-card-icon users-icon">
+                <i class="bi bi-people"></i>
+            </div>
+            <h3>Пользователи</h3>
+            <p>Управление аккаунтами, ролями и блокировками</p>
+            <a href="/Admin/Users" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-arrow-right"></i>
+                Управлять
+            </a>
+        </div>
+
+        @* Издатели *@
+        <div class="admin-card">
+            <div class="admin-card-icon publishers-icon">
+                <i class="bi bi-building"></i>
+            </div>
+            <h3>Издатели</h3>
+            <p>Верификация издателей, управление заявками</p>
+            <a href="/Admin/Publishers" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-arrow-right"></i>
+                Управлять
+            </a>
+        </div>
+
+        @* Игры *@
+        <div class="admin-card">
+            <div class="admin-card-icon games-icon">
+                <i class="bi bi-controller"></i>
+            </div>
+            <h3>Игры</h3>
+            <p>Модерация игр, управление каталогом</p>
+            <a href="/Admin/Games" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-arrow-right"></i>
+                Управлять
+            </a>
+        </div>
+
+        @* Категории *@
+        <div class="admin-card">
+            <div class="admin-card-icon categories-icon">
+                <i class="bi bi-tags"></i>
+            </div>
+            <h3>Категории</h3>
+            <p>Управление жанрами и категориями игр</p>
+            <a href="/Admin/Categories" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-arrow-right"></i>
+                Управлять
+            </a>
+        </div>
+    </div>
+</div>

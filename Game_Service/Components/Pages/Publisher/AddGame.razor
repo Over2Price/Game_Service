@@ -1,0 +1,506 @@
+﻿@page "/Publisher/AddGame"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Game_Service.Services
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using System.ComponentModel.DataAnnotations.Schema
+
+@attribute [Authorize(Roles = "UserPublisher, Admin")]
+@inject IServiceScopeFactory ScopeFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject ILogger<AddGame> Logger
+
+<PageTitle>Добавить игру — Game Service</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-header">
+        <h1>
+            <i class="bi bi-plus-circle"></i>
+            Добавить игру
+        </h1>
+        <p class="text-muted">Заполните информацию о новой игре</p>
+    </div>
+
+    @if (isCheckingAccess)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Проверка доступа...</p>
+        </div>
+    }
+    else if (!hasAccess)
+    {
+        <div class="empty-state">
+            <i class="bi bi-shield-exclamation"></i>
+            <h3>Доступ запрещён</h3>
+            <p>@accessErrorMessage</p>
+            <a href="/" class="btn btn-outline-primary">
+                <i class="bi bi-house"></i>
+                На главную
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="add-game-form">
+            <EditForm Model="Model" OnValidSubmit="OnSubmitAsync" FormName="add-game">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="validation-summary" />
+
+                <div class="form-card">
+                    <h3 class="form-card-title">
+                        <i class="bi bi-info-circle"></i>
+                        Основная информация
+                    </h3>
+
+                    <div class="form-group">
+                        <label for="title" class="form-label">Название игры *</label>
+                        <InputText @bind-Value="Model.Title" id="title" class="form-control"
+                                   placeholder="Введите название игры" />
+                        <ValidationMessage For="() => Model.Title" class="validation-message" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description" class="form-label">Описание</label>
+                        <InputTextArea @bind-Value="Model.Description" id="description" class="form-control"
+                                       rows="6" placeholder="Подробное описание игры..." />
+                        <small class="form-hint">Максимум 2000 символов.</small>
+                        <ValidationMessage For="() => Model.Description" class="validation-message" />
+                    </div>
+
+                    <div class="form-row form-row-2">
+                        <div class="form-group">
+                            <label for="price" class="form-label">Цена (₽)</label>
+                            <InputNumber @bind-Value="Model.Price" id="price" class="form-control"
+                                         placeholder="19.99" />
+                            <small class="form-hint">Оставьте пустым, если игра бесплатная.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="releaseDate" class="form-label">Дата релиза</label>
+                            <InputDate @bind-Value="Model.ReleaseDate" id="releaseDate" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <h3 class="form-card-title">
+                        <i class="bi bi-image"></i>
+                        Медиа
+                    </h3>
+
+                    @* ОБЛОЖКА — ИСПРАВЛЕНО *@
+                    <div class="form-group">
+                        <label class="form-label">Обложка игры</label>
+                        <div class="avatar-upload-wrapper">
+                            <div class="cover-preview" @onclick="OpenFilePicker">
+                                @if (!string.IsNullOrEmpty(coverPreview))
+                                {
+                                    <img src="@coverPreview" alt="Preview" class="cover-image" />
+                                }
+                                else
+                                {
+                                    <span class="cover-placeholder">
+                                        <i class="bi bi-image"></i>
+                                    </span>
+                                }
+                                <span class="avatar-overlay">
+                                    <i class="bi bi-camera"></i>
+                                </span>
+                            </div>
+                            <div class="avatar-actions">
+                                <label class="btn-upload" for="cover-file-input">
+                                    <i class="bi bi-upload"></i>
+                                    <span>Загрузить обложку</span>
+                                </label>
+                                @if (!string.IsNullOrEmpty(coverPreview))
+                                {
+                                    <button type="button" class="btn-remove" @onclick="RemoveCover">
+                                        <i class="bi bi-trash"></i>
+                                        <span>Удалить</span>
+                                    </button>
+                                }
+                            </div>
+                            <InputFile id="cover-file-input"
+                                       class="hidden-file-input"
+                                       accept="image/jpeg,image/png,image/webp"
+                                       OnChange="OnCoverChanged" />
+                        </div>
+                        <small class="form-hint">Рекомендуемый размер: 600×900 пикселей. JPG, PNG или WebP. Макс 5 МБ.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="trailerUrl" class="form-label">Ссылка на трейлер</label>
+                        <InputText @bind-Value="Model.TrailerUrl" id="trailerUrl" class="form-control"
+                                   placeholder="https://www.youtube.com/watch?v=..." />
+                        <small class="form-hint">Ссылка на YouTube или другой видеохостинг.</small>
+                    </div>
+                </div>
+
+                @* Категории *@
+                <div class="form-card">
+                    <h3 class="form-card-title">
+                        <i class="bi bi-tags"></i>
+                        Категории
+                    </h3>
+                    <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
+                        Выберите категории, которые описывают вашу игру.
+                    </p>
+
+                    @* Выпадающий список с поиском *@
+                    <div class="categories-select-wrapper">
+                        <div class="categories-search">
+                            <i class="bi bi-search"></i>
+                            <input type="text"
+                                   class="form-control"
+                                   placeholder="Поиск категорий..."
+                                   @bind="categorySearch"
+                                   @bind:event="oninput" />
+                        </div>
+
+                        <div class="categories-dropdown">
+                            @foreach (var category in filteredCategories)
+                            {
+                                <label class="category-option @(selectedCategoryIds.Contains(category.Id) ? "selected" : "")">
+                                    <input type="checkbox"
+                                           checked="@selectedCategoryIds.Contains(category.Id)"
+                                           @onchange="() => ToggleCategory(category.Id)" />
+                                    <span>@category.Name</span>
+                                    @if (selectedCategoryIds.Contains(category.Id))
+                                    {
+                                        <i class="bi bi-check-lg"></i>
+                                    }
+                                </label>
+                            }
+                        </div>
+                    </div>
+
+                    @* Выбранные категории (чипсы) *@
+                    @if (selectedCategoryIds.Any())
+                    {
+                        <div class="selected-categories">
+                            <span class="selected-label">Выбрано: @selectedCategoryIds.Count</span>
+                            <div class="selected-chips">
+                                @foreach (var id in selectedCategoryIds)
+                                {
+                                    var cat = allCategories.FirstOrDefault(c => c.Id == id);
+                                    if (cat != null)
+                                    {
+                                        <span class="chip">
+                                            @cat.Name
+                                            <button type="button" class="chip-remove" @onclick="() => ToggleCategory(id)">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="form-card">
+                    <h3 class="form-card-title">
+                        <i class="bi bi-building"></i>
+                        Издатель
+                    </h3>
+                    <p class="text-muted" style="font-size: 0.85rem;">
+                        Игра будет автоматически привязана к вашему издателю:
+                        <strong>@publisherName</strong>
+                    </p>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary btn-submit" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner"></span>
+                            <span>Создание игры...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-plus-circle"></i>
+                            <span>Добавить игру</span>
+                        }
+                    </button>
+                    <a href="/publishers" class="btn btn-outline-primary">
+                        <i class="bi bi-x-circle"></i>
+                        Отмена
+                    </a>
+                </div>
+            </EditForm>
+
+            @if (!string.IsNullOrEmpty(statusMessage))
+            {
+                <div class="alert @(isSuccess ? "alert-success" : "alert-error") fade-in" style="margin-top: 1.5rem;">
+                    <i class="bi bi-@(isSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                    <span>@statusMessage</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool isCheckingAccess = true;
+    private bool hasAccess;
+    private string? accessErrorMessage;
+    private string? publisherName;
+    private int publisherId;
+    private bool isSubmitting;
+    private string? statusMessage;
+    private bool isSuccess;
+
+    private AddGameModel Model { get; set; } = new();
+    private List<Category> allCategories = new();
+    private HashSet<int> selectedCategoryIds = new();
+
+    private string? coverPreview;
+    private IBrowserFile? selectedCoverFile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAccessAsync();
+        if (hasAccess)
+        {
+            await LoadCategoriesAsync();
+        }
+    }
+
+    private string categorySearch = string.Empty;
+
+    private IEnumerable<Category> filteredCategories =>
+        string.IsNullOrWhiteSpace(categorySearch)
+            ? allCategories
+            : allCategories.Where(c => c.Name.Contains(categorySearch, StringComparison.OrdinalIgnoreCase));
+
+
+    private async Task CheckAccessAsync()
+    {
+        isCheckingAccess = true;
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (!user.Identity?.IsAuthenticated ?? true)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Вы не авторизованы.";
+                return;
+            }
+
+            var appUser = await UserManager.GetUserAsync(user);
+
+            if (appUser == null)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Пользователь не найден.";
+                return;
+            }
+
+            if (!appUser.IsPublisherRepresentative)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Вы не являетесь представителем издателя.";
+                return;
+            }
+
+            if (!appUser.IsPublisherVerified)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Ваш издатель ещё не прошёл верификацию. Дождитесь подтверждения администратором.";
+                return;
+            }
+
+            if (!appUser.PublisherId.HasValue)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Вы не привязаны к издателю.";
+                return;
+            }
+
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var publisher = await dbContext.GamePublishers.FindAsync(appUser.PublisherId.Value);
+
+            if (publisher == null)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Издатель не найден.";
+                return;
+            }
+
+            publisherName = publisher.GamePublisherName;
+            publisherId = publisher.Id;
+            hasAccess = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при проверке доступа к созданию игры");
+            hasAccess = false;
+            accessErrorMessage = "Произошла внутренняя ошибка.";
+        }
+        finally
+        {
+            isCheckingAccess = false;
+        }
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        allCategories = await dbContext.Categories
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+    }
+
+    private void ToggleCategory(int categoryId)
+    {
+        if (selectedCategoryIds.Contains(categoryId))
+            selectedCategoryIds.Remove(categoryId);
+        else
+            selectedCategoryIds.Add(categoryId);
+    }
+
+    private void OpenFilePicker()
+    {
+        // Ничего не делаем — клик по label сам откроет InputFile
+    }
+
+    // ========== ИСПРАВЛЕНИЕ 1: Превью + сброс ==========
+    private async Task OnCoverChanged(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        // Если файл не выбран (отмена в диалоге) — ничего не делаем
+        if (file == null || file.Size == 0)
+            return;
+
+        try
+        {
+            // Читаем файл в массив байт
+            var buffer = new byte[file.Size];
+            await file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024).ReadAsync(buffer);
+
+            // Конвертируем в base64 для превью
+            var base64 = Convert.ToBase64String(buffer);
+
+            // Сбрасываем предыдущее превью
+            coverPreview = null;
+            StateHasChanged();
+
+            // Задаём новое превью
+            coverPreview = $"data:{file.ContentType};base64,{base64}";
+            selectedCoverFile = file;
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Ошибка при создании превью обложки");
+            coverPreview = null;
+            selectedCoverFile = null;
+        }
+    }
+
+    // ========== ИСПРАВЛЕНИЕ 2: Полное удаление ==========
+    private void RemoveCover()
+    {
+        coverPreview = null;
+        selectedCoverFile = null;
+        StateHasChanged();
+    }
+
+    private async Task OnSubmitAsync()
+    {
+        isSubmitting = true;
+        statusMessage = null;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var game = new Game
+            {
+                Title = Model.Title.Trim(),
+                Description = Model.Description?.Trim(),
+                Price = Model.Price,
+                ReleaseDate = Model.ReleaseDate,
+                TrailerUrl = Model.TrailerUrl?.Trim(),
+                PublisherId = publisherId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            if (selectedCoverFile != null)
+            {
+                var fileName = $"game_{Guid.NewGuid():N}{Path.GetExtension(selectedCoverFile.Name)}";
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games");
+
+                if (!Directory.Exists(uploadsFolder))
+                    Directory.CreateDirectory(uploadsFolder);
+
+                var filePath = Path.Combine(uploadsFolder, fileName);
+                await using var stream = new FileStream(filePath, FileMode.Create);
+                await selectedCoverFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024).CopyToAsync(stream);
+
+                game.CoverImageUrl = $"/uploads/games/{fileName}";
+            }
+
+            dbContext.Games.Add(game);
+            await dbContext.SaveChangesAsync();
+
+            foreach (var categoryId in selectedCategoryIds)
+            {
+                dbContext.GameCategories.Add(new GameCategory
+                {
+                    GameId = game.Id,
+                    CategoryId = categoryId
+                });
+            }
+            await dbContext.SaveChangesAsync();
+
+            statusMessage = $"Игра «{game.Title}» успешно добавлена!";
+            isSuccess = true;
+
+            Model = new AddGameModel();
+            selectedCategoryIds.Clear();
+            RemoveCover();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при создании игры");
+            statusMessage = $"Ошибка: {ex.Message}";
+            isSuccess = false;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private class AddGameModel
+    {
+        [Required(ErrorMessage = "Название обязательно")]
+        [MaxLength(200)]
+        public string Title { get; set; } = string.Empty;
+
+        [MaxLength(2000, ErrorMessage = "Описание не может превышать 2000 символов")]
+        public string? Description { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal? Price { get; set; }
+
+        public DateTime? ReleaseDate { get; set; }
+
+        [MaxLength(500)]
+        public string? TrailerUrl { get; set; }
+    }
+}

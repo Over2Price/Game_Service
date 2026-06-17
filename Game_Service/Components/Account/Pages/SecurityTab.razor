@@ -1,0 +1,248 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using Game_Service.Data.Models
+@using System.Text.Encodings.Web
+@using System.Text
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using Game_Service.Services
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject Game_Service.Services.IMailService MailService
+
+
+<div>
+    <h2><i class="bi bi-shield-lock"></i> Безопасность</h2>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">Смена email и пароля</p>
+
+    @* ===== СМЕНА EMAIL ===== *@
+    <div class="security-card">
+        <h3><i class="bi bi-envelope"></i> Смена email</h3>
+        <p class="security-card-desc">Текущий email: <strong>@CurrentUser.Email</strong></p>
+
+        <EditForm Model="emailModel" OnValidSubmit="ChangeEmail" FormName="change-email">
+            <DataAnnotationsValidator />
+            <div class="form-group">
+                <label class="form-label">Новый email</label>
+                <InputText @bind-Value="emailModel.NewEmail" class="form-control" placeholder="new@email.com" />
+                <ValidationMessage For="() => emailModel.NewEmail" class="validation-message" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Текущий пароль</label>
+                <InputText @bind-Value="emailModel.Password" class="form-control" type="password" placeholder="Для подтверждения" />
+                <ValidationMessage For="() => emailModel.Password" class="validation-message" />
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" disabled="@isChangingEmail">
+                @if (isChangingEmail)
+                {
+                    <span class="spinner"></span>
+                    <span>Отправка...</span>
+ }
+                else
+                {
+                    <i class="bi bi-send"></i>
+                    <span>Отправить письмо для смены email</span>
+ }
+            </button>
+        </EditForm>
+
+        @if (!string.IsNullOrEmpty(emailMessage))
+        {
+            <div class="alert @(emailSuccess ? "alert-success" : "alert-error") fade-in" style="margin-top: 0.75rem;">
+                <i class="bi bi-@(emailSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                <span>@emailMessage</span>
+            </div>
+        }
+    </div>
+
+    @* ===== СМЕНА ПАРОЛЯ ===== *@
+    <div class="security-card" style="margin-top: 1.5rem;">
+        <h3><i class="bi bi-lock"></i> Смена пароля</h3>
+
+        <EditForm Model="passwordModel" OnValidSubmit="ChangePassword" FormName="change-password">
+            <DataAnnotationsValidator />
+            <div class="form-group">
+                <label class="form-label">Текущий пароль</label>
+                <InputText @bind-Value="passwordModel.CurrentPassword" class="form-control" type="password" placeholder="Текущий пароль" />
+                <ValidationMessage For="() => passwordModel.CurrentPassword" class="validation-message" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Новый пароль</label>
+                <InputText @bind-Value="passwordModel.NewPassword" class="form-control" type="password" placeholder="Минимум 6 символов" />
+                <ValidationMessage For="() => passwordModel.NewPassword" class="validation-message" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Подтверждение пароля</label>
+                <InputText @bind-Value="passwordModel.ConfirmPassword" class="form-control" type="password" placeholder="Повторите пароль" />
+                <ValidationMessage For="() => passwordModel.ConfirmPassword" class="validation-message" />
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" disabled="@isChangingPassword">
+                @if (isChangingPassword)
+                {
+                    <span class="spinner"></span>
+                    <span>Смена...</span>
+ }
+                else
+                {
+                    <i class="bi bi-check-lg"></i>
+                    <span>Сменить пароль</span>
+ }
+            </button>
+        </EditForm>
+
+        @if (!string.IsNullOrEmpty(passwordMessage))
+        {
+            <div class="alert @(passwordSuccess ? "alert-success" : "alert-error") fade-in" style="margin-top: 0.75rem;">
+                <i class="bi bi-@(passwordSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                <span>@passwordMessage</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public ApplicationUser CurrentUser { get; set; } = null!;
+
+    private EmailModel emailModel = new();
+    private bool isChangingEmail;
+    private string? emailMessage;
+    private bool emailSuccess;
+
+    private PasswordModel passwordModel = new();
+    private bool isChangingPassword;
+    private string? passwordMessage;
+    private bool passwordSuccess;
+
+    private async Task ChangeEmail()
+    {
+        isChangingEmail = true;
+        emailMessage = null;
+
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var appUser = await UserManager.GetUserAsync(authState.User);
+            if (appUser == null) return;
+
+            var checkPassword = await UserManager.CheckPasswordAsync(appUser, emailModel.Password);
+            if (!checkPassword)
+            {
+                emailMessage = "Неверный пароль.";
+                emailSuccess = false;
+                return;
+            }
+
+            // Генерируем токен смены email
+            var code = await UserManager.GenerateChangeEmailTokenAsync(appUser, emailModel.NewEmail.Trim());
+            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+
+            var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("Account/ConfirmEmailChange").AbsoluteUri,
+                new Dictionary<string, object?>
+                {
+                    ["userId"] = appUser.Id,
+                    ["email"] = emailModel.NewEmail.Trim(),
+                    ["code"] = code
+                });
+
+            // Письмо на ТЕКУЩУЮ почту
+            var subject = "Подтверждение смены email — Game Service";
+            var body = $@"
+            <div style='font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;'>
+                <h2 style='color: #2563EB;'>Смена email</h2>
+                <p>Здравствуйте, {appUser.DisplayName ?? appUser.UserName}!</p>
+                <p>Вы запросили смену email на <strong>{emailModel.NewEmail.Trim()}</strong>.</p>
+                <p>Для подтверждения перейдите по ссылке:</p>
+                <p>
+                    <a href='{HtmlEncoder.Default.Encode(callbackUrl)}'
+                       style='display: inline-block; background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;'>
+                        Подтвердить смену email
+                    </a>
+                </p>
+                <p style='color: #64748B; font-size: 14px;'>Если вы не запрашивали смену email, проигнорируйте это письмо.</p>
+            </div>";
+
+            var mailData = new MailData(appUser.Email!, subject, body);
+            await MailService.SendAsync(mailData);
+
+            emailMessage = $"Письмо с подтверждением отправлено на {appUser.Email}. Перейдите по ссылке в письме для завершения смены email.";
+            emailSuccess = true;
+            emailModel = new EmailModel();
+        }
+        catch (Exception ex)
+        {
+            emailMessage = $"Ошибка: {ex.Message}";
+            emailSuccess = false;
+        }
+        finally
+        {
+            isChangingEmail = false;
+        }
+    }
+
+    private async Task ChangePassword()
+    {
+        isChangingPassword = true;
+        passwordMessage = null;
+
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var appUser = await UserManager.GetUserAsync(authState.User);
+            if (appUser == null) return;
+
+            var result = await UserManager.ChangePasswordAsync(
+                appUser, passwordModel.CurrentPassword, passwordModel.NewPassword);
+
+            if (result.Succeeded)
+            {
+                await SignInManager.RefreshSignInAsync(appUser);
+                passwordMessage = "Пароль успешно изменён.";
+                passwordSuccess = true;
+                passwordModel = new PasswordModel();
+            }
+            else
+            {
+                passwordMessage = result.Errors.FirstOrDefault()?.Description ?? "Ошибка при смене пароля.";
+                passwordSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            passwordMessage = $"Ошибка: {ex.Message}";
+            passwordSuccess = false;
+        }
+        finally
+        {
+            isChangingPassword = false;
+        }
+    }
+
+    private class EmailModel
+    {
+        [Required(ErrorMessage = "Введите новый email")]
+        [EmailAddress(ErrorMessage = "Некорректный email")]
+        public string NewEmail { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Введите пароль")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    private class PasswordModel
+    {
+        [Required(ErrorMessage = "Введите текущий пароль")]
+        public string CurrentPassword { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Введите новый пароль")]
+        [MinLength(6, ErrorMessage = "Минимум 6 символов")]
+        public string NewPassword { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Подтвердите пароль")]
+        [Compare(nameof(NewPassword), ErrorMessage = "Пароли не совпадают")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

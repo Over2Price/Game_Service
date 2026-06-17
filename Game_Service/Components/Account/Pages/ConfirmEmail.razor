@@ -1,0 +1,263 @@
+﻿@* @page "/Account/ConfirmEmail"
+
+@using System.Text
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Confirm email</PageTitle>
+
+<h1>Confirm email</h1>
+<StatusMessage Message="@statusMessage" />
+
+@code {
+    private string? statusMessage;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? UserId { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Code { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserId is null || Code is null)
+        {
+            RedirectManager.RedirectTo("");
+        }
+
+        var user = await UserManager.FindByIdAsync(UserId);
+        if (user is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            statusMessage = $"Error loading user with ID {UserId}";
+        }
+        else
+        {
+            var code = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(Code));
+            var result = await UserManager.ConfirmEmailAsync(user, code);
+            statusMessage = result.Succeeded ? "Thank you for confirming your email." : "Error confirming your email.";
+        }
+    }
+}
+ *@
+
+@page "/Account/ConfirmEmail"
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using Game_Service.Data.Models
+@using System.Text
+@using System.Windows
+
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+
+<PageTitle>Подтверждение email — Game Service</PageTitle>
+
+<div class="register-page">
+    <div class="register-container">
+        @* Левая декоративная часть *@
+        <div class="register-decoration">
+            <div class="decoration-content">
+                <div class="decoration-icon">
+                    <i class="bi bi-@(isSuccess ? "shield-check" : "shield-exclamation")"></i>
+                </div>
+                <h2>@(isSuccess ? "Готово!" : "Ошибка")</h2>
+                <p>
+                    @(isSuccess
+                                        ? "Ваш email подтверждён. Теперь вам доступны все возможности Game Service."
+                                        : "Что-то пошло не так при подтверждении email. Не переживайте — это можно исправить.")
+                </p>
+                <div class="decoration-features">
+                    @if (isSuccess)
+                    {
+                        <div class="feature-item">
+                            <i class="bi bi-controller"></i>
+                            <span>Вы издатель? Напишите нам на почту - "GameServiceSupport@yandex.ru", чтобы пройти верификацию издателя.</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="feature-item">
+                            <i class="bi bi-arrow-repeat"></i>
+                            <span>Запросите новое письмо</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="bi bi-envelope"></i>
+                            <span>Проверьте папку «Спам»</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="bi bi-headset"></i>
+                            <span>Напишите в поддержку</span>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="decoration-circles">
+                <div class="circle circle-1"></div>
+                <div class="circle circle-2"></div>
+                <div class="circle circle-3"></div>
+            </div>
+        </div>
+
+        @* Правая часть — результат подтверждения *@
+        <div class="register-form-section">
+            <div class="confirmation-content">
+                @if (isLoading)
+                {
+                    <div class="confirmation-icon">
+                        <span class="spinner-large"></span>
+                    </div>
+                    <h1>Проверяем...</h1>
+                    <p class="confirmation-text">
+                        Подтверждаем ваш email. Это займёт пару секунд.
+                    </p>
+                }
+                else if (isSuccess)
+                {
+                    <div class="confirmation-icon success-icon">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <h1>Email подтверждён!</h1>
+
+                    @if (!string.IsNullOrEmpty(userEmail))
+                    {
+                        <div class="email-highlight">
+                            <i class="bi bi-envelope-check"></i>
+                            <span>@userEmail</span>
+                        </div>
+                    }
+
+                    <p class="confirmation-text">
+                        Ваш аккаунт полностью активирован. Добро пожаловать в Game Service!
+                    </p>
+
+                    <div class="confirmation-actions">
+                        <a href="/Account/Login" class="btn btn-primary">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            Войти в аккаунт
+                        </a>
+                        <a href="/" class="btn btn-outline-primary">
+                            <i class="bi bi-house"></i>
+                            На главную
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <div class="confirmation-icon error-icon">
+                        <i class="bi bi-x-circle"></i>
+                    </div>
+                    <h1>Не удалось подтвердить</h1>
+
+                    <p class="confirmation-text">
+                        @errorMessage
+                    </p>
+
+                    <div class="confirmation-actions">
+                        <a href="/Account/Login" class="btn btn-primary">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            Войти в аккаунт
+                        </a>
+                        <a href="/Account/ResendEmailConfirmation" class="btn btn-outline-primary">
+                            <i class="bi bi-send"></i>
+                            Отправить письмо повторно
+                        </a>
+                    </div>
+                }
+
+                <p class="back-link">
+                    <a href="/">
+                        <i class="bi bi-arrow-left"></i>
+                        Вернуться на главную
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? UserId { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Code { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private bool isLoading = true;
+    private bool isSuccess;
+    private string errorMessage = "Ссылка недействительна или устарела.";
+    private string? userEmail;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(Code))
+        {
+            isLoading = false;
+            isSuccess = false;
+            errorMessage = "Неверная ссылка подтверждения. Отсутствуют необходимые параметры.";
+            return;
+        }
+
+        try
+        {
+            var user = await UserManager.FindByIdAsync(UserId);
+            if (user == null)
+            {
+                isLoading = false;
+                isSuccess = false;
+                errorMessage = "Пользователь не найден. Возможно, аккаунт был удалён.";
+                return;
+            }
+
+            userEmail = user.Email;
+
+            // Декодируем токен из Base64URL
+            var codeBytes = WebEncoders.Base64UrlDecode(Code);
+            var codeString = Encoding.UTF8.GetString(codeBytes);
+
+            // Подтверждаем email
+            var result = await UserManager.ConfirmEmailAsync(user, codeString);
+
+            if (result.Succeeded)
+            {
+                isLoading = false;
+                isSuccess = true;
+            }
+            else
+            {
+                isLoading = false;
+                isSuccess = false;
+
+                // Определяем причину ошибки
+                if (user.EmailConfirmed)
+                {
+                    isSuccess = true; // Уже подтверждён — это не ошибка
+                    errorMessage = "Ваш email уже был подтверждён ранее.";
+                }
+                else
+                {
+                    errorMessage = result.Errors.FirstOrDefault()?.Description
+                        ?? "Ссылка подтверждения недействительна. Возможно, истёк срок действия (24 часа).";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            isLoading = false;
+            isSuccess = false;
+            errorMessage = "Произошла внутренняя ошибка при подтверждении email. Попробуйте позже.";
+        }
+    }
+}

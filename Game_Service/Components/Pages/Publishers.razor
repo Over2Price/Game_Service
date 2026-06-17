@@ -1,0 +1,41 @@
+﻿@page "/publishers"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Издателям — Game Service</PageTitle>
+
+<div class="publishers-page">
+    <div class="publishers-hero">
+        <h1>
+            <i class="bi bi-building"></i>
+            Издателям
+        </h1>
+        <p>Публикуйте игры, управляйте каталогом и находите новую аудиторию</p>
+    </div>
+
+    <div class="publishers-cards">
+        <div class="publisher-card">
+            <div class="publisher-card-icon">
+                <i class="bi bi-plus-circle"></i>
+            </div>
+            <h3>Добавить игру</h3>
+            <p>Опубликуйте новую игру в каталоге. Заполните описание, загрузите обложку, выберите категории.</p>
+            <a href="/Publisher/AddGame" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i>
+                Добавить
+            </a>
+        </div>
+
+        <div class="publisher-card">
+            <div class="publisher-card-icon">
+                <i class="bi bi-person-badge"></i>
+            </div>
+            <h3>Профиль издателя</h3>
+            <p>Редактируйте информацию о компании, сайте, стране и дате основания.</p>
+            <a href="/Publisher/Profile" class="btn btn-primary">
+                <i class="bi bi-pencil"></i>
+                Редактировать
+            </a>
+        </div>
+    </div>
+</div>

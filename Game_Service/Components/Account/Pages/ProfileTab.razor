@@ -1,0 +1,218 @@
+﻿@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+
+@inject IServiceScopeFactory ScopeFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+<div>
+    <h2><i class="bi bi-person"></i> Редактирование профиля</h2>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">Измените отображаемое имя, аватарку и личную информацию</p>
+
+    <EditForm Model="profileModel" OnValidSubmit="SaveProfile" FormName="edit-profile">
+        <DataAnnotationsValidator />
+
+        <div class="profile-form-layout">
+            <div class="profile-avatar-section">
+                <label class="avatar-edit-wrapper" for="avatar-input">
+                    <div class="avatar-edit-preview">
+                        @if (!string.IsNullOrEmpty(avatarPreview))
+                        {
+                            <img src="@avatarPreview" alt="Avatar" />
+                        }
+                        else if (!string.IsNullOrEmpty(CurrentUser?.AvatarUrl))
+                        {
+                            <img src="@CurrentUser.AvatarUrl" alt="Avatar" />
+                        }
+                        else
+                        {
+                            <span class="avatar-edit-placeholder">
+                                @(CurrentUser?.DisplayName?.FirstOrDefault() ?? CurrentUser?.Email?.FirstOrDefault() ?? '?')
+                            </span>
+                        }
+                        <span class="avatar-edit-overlay">
+                            <i class="bi bi-camera"></i>
+                        </span>
+                    </div>
+                </label>
+                <InputFile id="avatar-input" class="hidden-file-input" accept="image/jpeg,image/png,image/webp" OnChange="OnAvatarChanged" />
+                <label class="btn btn-sm btn-outline-primary" for="avatar-input" style="margin-top: 0.5rem;">
+                    <i class="bi bi-upload"></i> Загрузить
+                </label>
+                @if (!string.IsNullOrEmpty(avatarPreview) || !string.IsNullOrEmpty(CurrentUser?.AvatarUrl))
+                {
+                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="RemoveAvatar" style="margin-top: 0.25rem;">
+                        <i class="bi bi-trash"></i> Удалить
+                    </button>
+                }
+            </div>
+
+            <div class="profile-fields">
+                <div class="form-group">
+                    <label class="form-label">Отображаемое имя</label>
+                    <InputText @bind-Value="profileModel.DisplayName" class="form-control" placeholder="Как к вам обращаться" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">О себе</label>
+                    <InputTextArea @bind-Value="profileModel.Bio" class="form-control" rows="3" placeholder="Пара слов о себе" />
+                </div>
+
+                <div class="form-row form-row-2">
+                    <div class="form-group">
+                        <label class="form-label">Страна</label>
+                        <InputSelect @bind-Value="profileModel.CountryId" class="form-select">
+                            <option value="">— Не выбрана —</option>
+                            @foreach (var country in countries)
+                            {
+                                <option value="@country.Id">@country.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Дата рождения</label>
+                        <InputDate @bind-Value="profileModel.DateOfBirth" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 0.5rem;">
+                    <label class="form-label">Email</label>
+                    <input class="form-control" value="@CurrentUser?.Email" readonly disabled />
+                    <small class="form-hint">Email можно изменить во вкладке «Безопасность»</small>
+                </div>
+
+                <button type="submit" class="btn btn-primary" disabled="@isSaving" style="margin-top: 1rem;">
+                    @if (isSaving)
+                    {
+                        <span class="spinner"></span>
+                        <span>Сохранение...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-check-lg"></i>
+                        <span>Сохранить изменения</span>
+                    }
+                </button>
+
+                @if (!string.IsNullOrEmpty(profileMessage))
+                {
+                    <div class="alert @(profileSuccess ? "alert-success" : "alert-error") fade-in" style="margin-top: 1rem;">
+                        <i class="bi bi-@(profileSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                        <span>@profileMessage</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    [Parameter] public ApplicationUser CurrentUser { get; set; } = null!;
+    [Parameter] public EventCallback<ApplicationUser> OnProfileUpdated { get; set; }
+
+    private ProfileModel profileModel = new();
+    private string? avatarPreview;
+    private IBrowserFile? selectedAvatarFile;
+    private List<Country> countries = new();
+    private bool isSaving;
+    private string? profileMessage;
+    private bool profileSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        profileModel = new ProfileModel
+        {
+            DisplayName = CurrentUser.DisplayName,
+            Bio = CurrentUser.Bio,
+            CountryId = CurrentUser.CountryId,
+            DateOfBirth = CurrentUser.DateOfBirth
+        };
+
+        using var scope = ScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        countries = await dbContext.Countries.OrderBy(c => c.Name).ToListAsync();
+    }
+
+    private async Task SaveProfile()
+    {
+        isSaving = true;
+        profileMessage = null;
+
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var appUser = await UserManager.GetUserAsync(authState.User);
+            if (appUser == null) return;
+
+            appUser.DisplayName = profileModel.DisplayName?.Trim();
+            appUser.Bio = profileModel.Bio?.Trim();
+            appUser.CountryId = profileModel.CountryId;
+            appUser.DateOfBirth = profileModel.DateOfBirth;
+            appUser.UpdatedAt = DateTime.UtcNow;
+
+            if (selectedAvatarFile != null)
+            {
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "avatars");
+                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+                var fileName = $"user_{appUser.Id}_{Guid.NewGuid():N}{Path.GetExtension(selectedAvatarFile.Name)}";
+                var filePath = Path.Combine(uploadsFolder, fileName);
+                await using var stream = new FileStream(filePath, FileMode.Create);
+                await selectedAvatarFile.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024).CopyToAsync(stream);
+                appUser.AvatarUrl = $"/uploads/avatars/{fileName}";
+            }
+
+            var result = await UserManager.UpdateAsync(appUser);
+            if (result.Succeeded)
+            {
+                await OnProfileUpdated.InvokeAsync(appUser);
+                profileMessage = "Профиль обновлён!";
+                profileSuccess = true;
+                selectedAvatarFile = null;
+            }
+            else
+            {
+                profileMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+                profileSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            profileMessage = $"Ошибка: {ex.Message}";
+            profileSuccess = false;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task OnAvatarChanged(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null || file.Size == 0) return;
+        var buffer = new byte[file.Size];
+        await file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024).ReadAsync(buffer);
+        avatarPreview = $"data:{file.ContentType};base64,{Convert.ToBase64String(buffer)}";
+        selectedAvatarFile = file;
+        StateHasChanged();
+    }
+
+    private void RemoveAvatar()
+    {
+        avatarPreview = null;
+        selectedAvatarFile = null;
+        CurrentUser.AvatarUrl = null;
+        StateHasChanged();
+    }
+
+    private class ProfileModel
+    {
+        [MaxLength(50)] public string? DisplayName { get; set; }
+        [MaxLength(500)] public string? Bio { get; set; }
+        public int? CountryId { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+    }
+}

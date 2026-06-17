@@ -1,0 +1,151 @@
+﻿/* ============================================================
+   Загрузка аватарки
+   ============================================================ */
+
+.avatar-upload-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+/* Область превью */
+.avatar-preview {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 3px dashed var(--border-light);
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    transition: all var(--transition);
+    flex-shrink: 0;
+    background: var(--bg-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+    .avatar-preview:hover {
+        border-color: var(--primary);
+        border-style: solid;
+    }
+
+.avatar-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    display: block;
+}
+
+.avatar-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 2.5rem;
+    color: var(--text-secondary);
+}
+
+/* Оверлей при наведении */
+.avatar-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(37, 99, 235, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.5rem;
+    opacity: 0;
+    transition: opacity var(--transition);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.avatar-preview:hover .avatar-overlay {
+    opacity: 1;
+}
+
+/* Кнопки действий */
+.avatar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+/* Стилизованная кнопка "Загрузить" */
+.btn-upload {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-white);
+    border: 1.5px solid var(--primary);
+    color: var(--primary);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all var(--transition);
+    user-select: none;
+}
+
+    .btn-upload:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+    .btn-upload i {
+        font-size: 0.9rem;
+    }
+
+/* Кнопка "Удалить" */
+.btn-remove {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-white);
+    border: 1.5px solid var(--danger);
+    color: var(--danger);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all var(--transition);
+}
+
+    .btn-remove:hover {
+        background: var(--danger);
+        color: white;
+    }
+
+/* Скрытый InputFile */
+.hidden-file-input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .avatar-upload-wrapper {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .avatar-actions {
+        flex-direction: row;
+        gap: 0.75rem;
+    }
+}

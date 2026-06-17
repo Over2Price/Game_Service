@@ -1,0 +1,71 @@
+﻿
+@inherits LayoutComponentBase
+
+<div class="page">
+    <header class="topbar">
+        <a class="topbar-btn topbar-btn-brand" href="/">
+            <span>Game Service</span>
+        </a>
+
+        <nav class="topbar-nav">
+            <a class="topbar-btn" href="/games">
+                <span>Игры</span>
+            </a>
+
+            <a class="topbar-btn" href="/publishers">
+                <span>Издателям</span>
+            </a>
+
+            <AuthorizeView Roles="Admin">
+                <a class="topbar-btn" href="/Admin">
+                    <span>Админ-панель</span>
+                </a>
+
+                <a class="topbar-btn" href="/TestEmail">
+                    <span>Тест Email</span>
+                </a>
+            </AuthorizeView>
+        </nav>
+
+        <div class="topbar-actions">
+            <AuthorizeView>
+                <Authorized>
+                    <a class="topbar-btn" href="/Account/Manage">
+                        <span>@context.User.Identity?.Name</span>
+                    </a>
+                    <form action="Account/Logout" method="post" class="topbar-logout-form">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="returnUrl" value="@currentUrl" />
+                        <button type="submit" class="topbar-btn">
+                            <span>Выйти</span>
+                        </button>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    <a class="topbar-btn" href="/Account/Login">
+                        <span>Войти</span>
+                    </a>
+                    <a class="topbar-btn" href="/Account/Register">
+                        <span>Регистрация</span>
+                    </a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </header>
+
+    <main class="main-content">
+        @Body
+    </main>
+</div>
+
+@code {
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+
+    private string? currentUrl;
+
+    protected override void OnInitialized()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+    }
+}

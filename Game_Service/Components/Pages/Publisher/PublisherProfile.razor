@@ -1,0 +1,395 @@
+﻿@page "/Publisher/Profile"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Game_Service.Services
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations;
+@using System.ComponentModel.DataAnnotations.Schema;
+
+@attribute [Authorize(Roles = "UserPublisher, Admin")]
+@inject IServiceScopeFactory ScopeFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject ILogger<PublisherProfile> Logger
+
+<PageTitle>Профиль издателя — Game Service</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-header">
+        <h1>
+            <i class="bi bi-building"></i>
+            @(isExistingPublisher ? "Редактировать профиль" : "Создать профиль издателя")
+        </h1>
+        <p class="text-muted">
+            @(isExistingPublisher
+                        ? "Обновите информацию о вашей компании"
+                        : "Заполните информацию о вашей компании-издателе")
+        </p>
+    </div>
+
+    @* Проверка прав *@
+    @if (isCheckingAccess)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Проверка доступа...</p>
+        </div>
+    }
+    else if (!hasAccess)
+    {
+        <div class="empty-state">
+            <i class="bi bi-shield-exclamation"></i>
+            <h3>Доступ запрещён</h3>
+            <p>@accessErrorMessage</p>
+            <a href="/" class="btn btn-outline-primary">
+                <i class="bi bi-house"></i>
+                На главную
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="add-game-form">
+            <EditForm Model="Model" OnValidSubmit="OnSubmitAsync" FormName="publisher-profile">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="validation-summary" />
+
+                <div class="form-card">
+                    <h3 class="form-card-title">
+                        <i class="bi bi-info-circle"></i>
+                        Основная информация
+                    </h3>
+
+                    @* Название компании *@
+                    <div class="form-group">
+                        <label for="name" class="form-label">Название компании *</label>
+                        <InputText @bind-Value="Model.GamePublisherName" id="name" class="form-control"
+                                   placeholder="Название вашей компании" />
+                        <ValidationMessage For="() => Model.GamePublisherName" class="validation-message" />
+                    </div>
+
+                    @* Описание *@
+                    <div class="form-group">
+                        <label for="description" class="form-label">Описание компании</label>
+                        <InputTextArea @bind-Value="Model.Description" id="description" class="form-control"
+                                       rows="5" placeholder="Расскажите о вашей компании..." />
+                        <small class="form-hint">Максимум 2000 символов.</small>
+                        <ValidationMessage For="() => Model.Description" class="validation-message" />
+                    </div>
+
+                    @* Веб-сайт и страна *@
+                    <div class="form-row form-row-2">
+                        <div class="form-group">
+                            <label for="website" class="form-label">Веб-сайт</label>
+                            <InputText @bind-Value="Model.Website" id="website" class="form-control"
+                                       placeholder="https://your-company.com" />
+                            <ValidationMessage For="() => Model.Website" class="validation-message" />
+                        </div>
+                        <div class="form-group">
+                            <label for="country" class="form-label">Страна</label>
+                            <InputText @bind-Value="Model.Country" id="country" class="form-control"
+                                       placeholder="Россия" />
+                            <ValidationMessage For="() => Model.Country" class="validation-message" />
+                        </div>
+                    </div>
+
+                    @* Дата основания *@
+                    <div class="form-group">
+                        <label for="foundedDate" class="form-label">Дата основания</label>
+                        <InputDate @bind-Value="Model.FoundedDate" id="foundedDate" class="form-control" />
+                    </div>
+                </div>
+
+                @* Информация о пользователе *@
+                <div class="form-card">
+                    <h3 class="form-card-title">
+                        <i class="bi bi-person-check"></i>
+                        Представитель
+                    </h3>
+                    <p class="text-muted" style="font-size: 0.85rem;">
+                        Вы привязаны к этому издателю как представитель.
+                        @if (!string.IsNullOrEmpty(currentUserRole))
+                        {
+                            <span>Должность: <strong>@currentUserRole</strong></span>
+                        }
+                    </p>
+                </div>
+
+                @* Кнопки *@
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary btn-submit" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner"></span>
+                            <span>Сохранение...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg"></i>
+                            <span>@(isExistingPublisher ? "Сохранить изменения" : "Создать профиль")</span>
+                        }
+                    </button>
+                    <a href="/Publisher/AddGame" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-circle"></i>
+                        Добавить игру
+                    </a>
+                </div>
+            </EditForm>
+
+            @* Сообщение о результате *@
+            @if (!string.IsNullOrEmpty(statusMessage))
+            {
+                <div class="alert @(isSuccess ? "alert-success" : "alert-error") fade-in" style="margin-top: 1.5rem;">
+                    <i class="bi bi-@(isSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                    <span>@statusMessage</span>
+                </div>
+            }
+
+            @* Список игр издателя (если профиль уже существует) *@
+            @if (isExistingPublisher && publisherGames.Any())
+            {
+                <div class="form-card" style="margin-top: 2rem;">
+                    <h3 class="form-card-title">
+                        <i class="bi bi-controller"></i>
+                        Игры издателя (@publisherGames.Count)
+                    </h3>
+                    <div class="publisher-games-list">
+                        @foreach (var game in publisherGames)
+                        {
+                            <div class="publisher-game-item">
+                                <div class="game-info">
+                                    <strong>@game.Title</strong>
+                                    <span class="text-muted">@(game.ReleaseDate?.ToString("dd.MM.yyyy") ?? "Дата не указана")</span>
+                                </div>
+                                <span class="text-muted">@(game.Price.HasValue ? $"{game.Price:C}" : "Бесплатно")</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool isCheckingAccess = true;
+    private bool hasAccess;
+    private string? accessErrorMessage;
+    private bool isExistingPublisher;
+    private string? currentUserRole;
+    private int? publisherId;
+    private bool isSubmitting;
+    private string? statusMessage;
+    private bool isSuccess;
+    private List<Game> publisherGames = new();
+
+    private PublisherProfileModel Model { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAccessAsync();
+        if (hasAccess && isExistingPublisher)
+        {
+            await LoadPublisherDataAsync();
+        }
+    }
+
+    private async Task CheckAccessAsync()
+    {
+        isCheckingAccess = true;
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (!user.Identity?.IsAuthenticated ?? true)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Вы не авторизованы.";
+                return;
+            }
+
+            var appUser = await UserManager.GetUserAsync(user);
+
+            if (appUser == null)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Пользователь не найден.";
+                return;
+            }
+
+            // Проверка: пользователь должен быть представителем издателя
+            if (!appUser.IsPublisherRepresentative)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Вы не являетесь представителем издателя. Используйте кнопку «Стать издателем» в профиле.";
+                return;
+            }
+
+            // Проверка: издатель должен быть верифицирован
+            if (!appUser.IsPublisherVerified)
+            {
+                hasAccess = false;
+                accessErrorMessage = "Ваш аккаунт издателя ещё не верифицирован администратором.";
+                return;
+            }
+
+            currentUserRole = appUser.PublisherRole;
+            publisherId = appUser.PublisherId;
+
+            // Проверяем, существует ли уже профиль издателя
+            if (publisherId.HasValue)
+            {
+                using var scope = ScopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var existingPublisher = await dbContext.GamePublishers
+                    .Include(p => p.Games)
+                    .FirstOrDefaultAsync(p => p.Id == publisherId.Value);
+
+                if (existingPublisher != null)
+                {
+                    isExistingPublisher = true;
+                    publisherGames = existingPublisher.Games.OrderByDescending(g => g.CreatedAt).ToList();
+                    Model = new PublisherProfileModel
+                    {
+                        GamePublisherName = existingPublisher.GamePublisherName,
+                        Description = existingPublisher.Description,
+                        Website = existingPublisher.Website,
+                        Country = existingPublisher.Country,
+                        FoundedDate = existingPublisher.FoundedDate
+                    };
+                }
+            }
+
+            hasAccess = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при проверке доступа к профилю издателя");
+            hasAccess = false;
+            accessErrorMessage = "Произошла внутренняя ошибка.";
+        }
+        finally
+        {
+            isCheckingAccess = false;
+        }
+    }
+
+    private async Task LoadPublisherDataAsync()
+    {
+        if (!publisherId.HasValue) return;
+
+        using var scope = ScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var publisher = await dbContext.GamePublishers
+            .Include(p => p.Games)
+            .FirstOrDefaultAsync(p => p.Id == publisherId.Value);
+
+        if (publisher != null)
+        {
+            publisherGames = publisher.Games.OrderByDescending(g => g.CreatedAt).ToList();
+        }
+    }
+
+    private async Task OnSubmitAsync()
+    {
+        isSubmitting = true;
+        statusMessage = null;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            if (isExistingPublisher && publisherId.HasValue)
+            {
+                // Обновляем существующий профиль
+                var publisher = await dbContext.GamePublishers.FindAsync(publisherId.Value);
+                if (publisher == null)
+                {
+                    statusMessage = "Издатель не найден.";
+                    isSuccess = false;
+                    return;
+                }
+
+                publisher.GamePublisherName = Model.GamePublisherName.Trim();
+                publisher.Description = Model.Description?.Trim();
+                publisher.Website = Model.Website?.Trim();
+                publisher.Country = Model.Country?.Trim();
+                publisher.FoundedDate = Model.FoundedDate;
+                publisher.UpdatedAt = DateTime.UtcNow;
+
+                await dbContext.SaveChangesAsync();
+                statusMessage = "Профиль издателя успешно обновлён!";
+                isSuccess = true;
+            }
+            else
+            {
+                // Создаём новый профиль издателя
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var appUser = await UserManager.GetUserAsync(authState.User);
+
+                var publisher = new GamePublisher
+                {
+                    GamePublisherName = Model.GamePublisherName.Trim(),
+                    Description = Model.Description?.Trim(),
+                    Website = Model.Website?.Trim(),
+                    Country = Model.Country?.Trim(),
+                    FoundedDate = Model.FoundedDate,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                dbContext.GamePublishers.Add(publisher);
+                await dbContext.SaveChangesAsync();
+
+                // Привязываем пользователя к созданному издателю
+                if (appUser != null)
+                {
+                    appUser.PublisherId = publisher.Id;
+                    await UserManager.UpdateAsync(appUser);
+                }
+
+                publisherId = publisher.Id;
+                isExistingPublisher = true;
+                statusMessage = "Профиль издателя успешно создан!";
+                isSuccess = true;
+            }
+
+            // Обновляем список игр
+            await LoadPublisherDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при сохранении профиля издателя");
+            statusMessage = $"Ошибка: {ex.Message}";
+            isSuccess = false;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private class PublisherProfileModel
+    {
+        [Required(ErrorMessage = "Название компании обязательно")]
+        [MaxLength(200)]
+        public string GamePublisherName { get; set; } = string.Empty;
+
+        [MaxLength(2000)]
+        public string? Description { get; set; }
+
+        [MaxLength(500)]
+        public string? Website { get; set; }
+
+        [MaxLength(100)]
+        public string? Country { get; set; }
+
+        public DateTime? FoundedDate { get; set; }
+    }
+}

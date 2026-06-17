@@ -1,0 +1,147 @@
+﻿@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@inject IServiceScopeFactory ScopeFactory
+
+<div>
+    <h2><i class="bi bi-clock-history"></i> Активность</h2>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">Ваши отзывы и история действий</p>
+
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Загрузка...</p>
+        </div>
+    }
+    else
+    {
+        @* ===== ИСТОРИЯ ДЕЙСТВИЙ ===== *@
+        <div class="activity-card">
+            <h3><i class="bi bi-calendar-check"></i> История действий</h3>
+            <div class="activity-timeline">
+                <div class="timeline-item">
+                    <i class="bi bi-person-plus"></i>
+                    <div>
+                        <span class="timeline-label">Регистрация</span>
+                        <span class="timeline-date">@CurrentUser.CreatedAt.ToString("dd.MM.yyyy в HH:mm")</span>
+                    </div>
+                </div>
+
+                @if (CurrentUser.LastLoginAt.HasValue)
+                {
+                    <div class="timeline-item">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        <div>
+                            <span class="timeline-label">Последний вход</span>
+                            <span class="timeline-date">@CurrentUser.LastLoginAt.Value.ToString("dd.MM.yyyy в HH:mm")</span>
+                        </div>
+                    </div>
+                }
+
+                @if (CurrentUser.IsPublisherRepresentative)
+                {
+                    <div class="timeline-item">
+                        <i class="bi bi-building"></i>
+                        <div>
+                            <span class="timeline-label">Статус издателя</span>
+                            <span class="timeline-date">
+                                @if (CurrentUser.IsPublisherVerified)
+                                {
+                                    <span class="text-success">Верифицирован @(CurrentUser.PublisherVerifiedAt?.ToString("dd.MM.yyyy") ?? "")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-warning">Ожидает верификации</span>
+                                }
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ===== МОИ ОТЗЫВЫ ===== *@
+        <div class="activity-card" style="margin-top: 1.5rem;">
+            <h3><i class="bi bi-chat-dots"></i> Мои отзывы (@reviews.Count)</h3>
+
+            @if (!reviews.Any())
+            {
+                <p class="text-muted" style="margin-top: 1rem;">Вы ещё не оставили ни одного отзыва.</p>
+                <a href="/games" class="btn btn-outline-primary btn-sm" style="margin-top: 0.5rem;">
+                    <i class="bi bi-controller"></i> Перейти к каталогу
+                </a>
+            }
+            else
+            {
+                <div class="reviews-list">
+                    @foreach (var review in reviews)
+                    {
+                        <div class="review-item">
+                            <div class="review-item-header">
+                                <a href="/games/@review.GameId" class="review-game-link">
+                                    <i class="bi bi-controller"></i>
+                                    @(review.Game?.Title ?? "Игра")
+                                </a>
+                                <span class="review-item-rating">@review.Rating/10</span>
+                                <span class="review-item-date">@review.CreatedAt.ToString("dd.MM.yyyy")</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(review.Title))
+                            {
+                                <div class="review-item-title">@review.Title</div>
+                            }
+                            <p class="review-item-content">@Truncate(review.Content, 150)</p>
+                            <div class="review-item-footer">
+                                <span class="review-recommend @(review.IsRecommended ? "recommend-yes" : "recommend-no")">
+                                    <i class="bi bi-hand-thumbs-@(review.IsRecommended ? "up" : "down")"></i>
+                                    @(review.IsRecommended ? "Рекомендую" : "Не рекомендую")
+                                </span>
+                                <a href="/games/@review.GameId" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i> К игре
+                                </a>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ApplicationUser CurrentUser { get; set; } = null!;
+
+    private bool isLoading = true;
+    private List<GameReview> reviews = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadActivity();
+    }
+
+    private async Task LoadActivity()
+    {
+        isLoading = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            reviews = await dbContext.GameReviews
+                .Include(r => r.Game)
+                .Where(r => r.UserId == CurrentUser.Id && r.Status == ReviewStatus.Published)
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string Truncate(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return text.Length <= maxLength ? text : text[..maxLength] + "...";
+    }
+}

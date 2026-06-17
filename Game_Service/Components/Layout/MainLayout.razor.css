@@ -1,0 +1,110 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* === БАР === */
+.topbar {
+    height: 64px;
+    background: #72ffa8;
+    display: flex;
+    align-items: stretch;
+    padding: 0;
+    gap: 0;
+    border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+}
+
+/* === НАВИГАЦИЯ === */
+.topbar-nav {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    flex: 1;
+}
+
+/* === ДЕЙСТВИЯ === */
+.topbar-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-left: auto;
+}
+
+/* === ОБЩИЙ СТИЛЬ ВСЕХ КНОПОК === */
+.topbar-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 102% !important;
+    padding: 0 18px !important;
+    background: #000 !important;
+    cursor: pointer !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    border-radius: 0 !important;
+    text-decoration: none !important;
+    flex-shrink: 0 !important;
+}
+
+    /* Текст внутри кнопок */
+    .topbar-btn span {
+        font-family: 'IBM Plex Mono', 'JetBrains Mono', Consolas, monospace !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px !important;
+        color: #fff !important;
+        line-height: 1 !important;
+    }
+
+/* Бренд (крупнее) */
+.topbar-btn-brand span {
+    font-size: 18px !important;
+    font-weight: 800 !important;
+}
+
+/* Hover */
+.topbar-btn:hover {
+    background: #1a1a1a !important;
+}
+
+    .topbar-btn:hover span {
+        color: #fff !important;
+    }
+
+/* Active */
+.topbar-btn.active {
+    background: #fff !important;
+}
+
+    .topbar-btn.active span {
+        color: #000 !important;
+    }
+
+/* Переопределение для NavLink (добавляет класс surface) */
+.topbar a.topbar-btn,
+.topbar .nav-link.topbar-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 102% !important;
+    padding: 0 18px !important;
+    background: #000 !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+/* === ФОРМА ВЫХОДА === */
+.topbar-logout-form {
+    display: flex;
+    margin: 0;
+    height: 100%;
+}
+
+/* === КОНТЕНТ === */
+.main-content {
+    flex: 1;
+    padding: 2rem;
+    background: #f8fafc;
+}

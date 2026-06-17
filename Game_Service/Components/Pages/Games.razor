@@ -1,0 +1,151 @@
+﻿@page "/games"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@inject IServiceScopeFactory ScopeFactory
+
+<PageTitle>Каталог игр — Game Service</PageTitle>
+
+<div class="games-page">
+    <div class="games-header">
+        <h1>
+            <i class="bi bi-controller"></i>
+            Каталог игр
+        </h1>
+        <p class="text-muted">Все игры, доступные на платформе</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <span class="spinner-large"></span>
+            <p>Загрузка игр...</p>
+        </div>
+    }
+    else if (!games.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-controller"></i>
+            <h3>Игр пока нет</h3>
+            <p>В каталоге ещё нет ни одной игры</p>
+        </div>
+    }
+    else
+    {
+        <div class="games-grid">
+            @foreach (var item in games)
+            {
+                <div class="game-card">
+                    <div class="game-card-image">
+                        @if (!string.IsNullOrEmpty(item.CoverImageUrl))
+                        {
+                            <img src="@item.CoverImageUrl" alt="@item.Title" />
+                        }
+                        else
+                        {
+                            <div class="game-card-no-image">
+                                <i class="bi bi-image"></i>
+                            </div>
+                        }
+                    </div>
+                    <div class="game-card-body">
+                        <h3>@item.Title</h3>
+                        <div class="game-card-meta">
+                            <span class="game-price">@(item.Price.HasValue ? $"{item.Price:C}" : "Бесплатно")</span>
+                            <span class="game-date">@(item.ReleaseDate?.ToString("dd.MM.yyyy") ?? "—")</span>
+                        </div>
+
+                        @* Рейтинг *@
+                        @if (item.AverageRating.HasValue)
+                        {
+                            <div class="game-rating">
+                                <span class="rating-value">★ @item.AverageRating.Value.ToString("0.0")</span>
+                                <span class="rating-count">(@item.ReviewCount)</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="game-rating game-rating-empty">
+                                <span class="rating-no-reviews">Нет оценок</span>
+                            </div>
+                        }
+
+                        <p class="game-card-desc">@Truncate(item.Description, 100)</p>
+                        <div class="game-card-publisher">
+                            <i class="bi bi-building"></i>
+                            @(item.PublisherName ?? "Неизвестный издатель")
+                        </div>
+                        <a href="/games/@item.Id" class="btn btn-primary btn-sm">
+                            <i class="bi bi-info-circle"></i>
+                            Подробнее
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<GameListItem> games = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGames();
+    }
+
+    private async Task LoadGames()
+    {
+        isLoading = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            games = await dbContext.Games
+                .Include(g => g.Publisher)
+                .Include(g => g.GameReviews)
+                .Select(g => new GameListItem
+                {
+                    Id = g.Id,
+                    Title = g.Title,
+                    Description = g.Description,
+                    Price = g.Price,
+                    ReleaseDate = g.ReleaseDate,
+                    CoverImageUrl = g.CoverImageUrl,
+                    PublisherName = g.Publisher != null ? g.Publisher.GamePublisherName : null,
+                    AverageRating = g.GameReviews.Any()
+                        ? Math.Round(g.GameReviews.Average(r => (double)r.Rating), 1)
+                        : null,
+                    ReviewCount = g.GameReviews.Count
+                })
+                .OrderByDescending(g => g.AverageRating ?? 0)
+                .ToListAsync();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string Truncate(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text)) return "—";
+        return text.Length <= maxLength ? text : text[..maxLength] + "...";
+    }
+
+    private class GameListItem
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public decimal? Price { get; set; }
+        public DateTime? ReleaseDate { get; set; }
+        public string? CoverImageUrl { get; set; }
+        public string? PublisherName { get; set; }
+        public double? AverageRating { get; set; }
+        public int ReviewCount { get; set; }
+    }
+}

@@ -1,0 +1,222 @@
+﻿@* @page "/Account/RegisterConfirmation"
+
+@using System.Text
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Register confirmation</PageTitle>
+
+<h1>Register confirmation</h1>
+
+<StatusMessage Message="@statusMessage" />
+
+@if (emailConfirmationLink is not null)
+{
+    <p>
+        This app does not currently have a real email sender registered, see <a href="https://aka.ms/aspaccountconf">these docs</a> for how to configure a real email sender.
+        Normally this would be emailed: <a href="@emailConfirmationLink">Click here to confirm your account</a>
+    </p>
+}
+else
+{
+    <p role="alert">Please check your email to confirm your account.</p>
+}
+
+@code {
+    private string? emailConfirmationLink;
+    private string? statusMessage;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? Email { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Email is null)
+        {
+            RedirectManager.RedirectTo("");
+        }
+
+        var user = await UserManager.FindByEmailAsync(Email);
+        if (user is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            statusMessage = "Error finding user for unspecified email";
+        }
+        else if (EmailSender is IdentityNoOpEmailSender)
+        {
+            // Once you add a real email sender, you should remove this code that lets you confirm the account
+            var userId = await UserManager.GetUserIdAsync(user);
+            var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+            emailConfirmationLink = NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+        }
+    }
+}
+ *@
+
+@page "/Account/RegisterConfirmation"
+@using Microsoft.AspNetCore.Identity
+@using Game_Service.Data.Models
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+
+<PageTitle>Подтверждение email — Game Service</PageTitle>
+
+<div class="register-page">
+    <div class="register-container">
+        @* Левая декоративная часть *@
+        <div class="register-decoration">
+            <div class="decoration-content">
+                <div class="decoration-icon">
+                    <i class="bi bi-envelope-check"></i>
+                </div>
+                <h2>Почти готово!</h2>
+                <p>Остался последний шаг — подтвердить ваш email адрес.</p>
+            </div>
+            <div class="decoration-circles">
+                <div class="circle circle-1"></div>
+                <div class="circle circle-2"></div>
+                <div class="circle circle-3"></div>
+            </div>
+        </div>
+
+        @* Правая часть — сообщение *@
+        <div class="register-form-section">
+            <div class="confirmation-content">
+
+                <h1>Проверьте вашу почту</h1>
+
+                <p class="confirmation-text">
+                    Мы отправили письмо со ссылкой для подтверждения на адрес
+                </p>
+
+                <div class="email-highlight">
+                    <i class="bi bi-envelope"></i>
+                    <span>@Email</span>
+                </div>
+
+                <p class="confirmation-hint">
+                    Перейдите по ссылке в письме, чтобы завершить регистрацию.
+                    Если письмо не пришло — проверьте папку «Спам».
+                </p>
+
+                <div class="confirmation-actions">
+                    <a href="/Account/Login" class="btn btn-outline-primary">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        Перейти ко входу
+                    </a>
+
+                    <button class="btn btn-primary" @onclick="ResendEmail" disabled="@isResending">
+                        @if (isResending)
+                        {
+                            <span class="spinner"></span>
+                            <span>Отправка...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-send"></i>
+                            <span>Отправить повторно</span>
+                        }
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(statusMessage))
+                {
+                    <div class="alert @(isSuccess ? "alert-success" : "alert-error") fade-in">
+                        <i class="bi bi-@(isSuccess ? "check-circle" : "exclamation-triangle")"></i>
+                        <span>@statusMessage</span>
+                    </div>
+                }
+
+                <p class="back-link">
+                    <a href="/">
+                        <i class="bi bi-arrow-left"></i>
+                        Вернуться на главную
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? Email { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private bool isResending;
+    private string? statusMessage;
+    private bool isSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Если Email не передан — показываем заглушку
+        if (string.IsNullOrEmpty(Email))
+        {
+            Email = "ваш email";
+        }
+    }
+
+    private async Task ResendEmail()
+    {
+        if (string.IsNullOrEmpty(Email) || Email == "ваш email")
+        {
+            statusMessage = "Email не указан. Вернитесь на страницу регистрации.";
+            isSuccess = false;
+            return;
+        }
+
+        isResending = true;
+        statusMessage = null;
+
+        try
+        {
+            var user = await UserManager.FindByEmailAsync(Email);
+            if (user == null)
+            {
+                statusMessage = "Пользователь с таким email не найден.";
+                isSuccess = false;
+                return;
+            }
+
+            if (user.EmailConfirmed)
+            {
+                statusMessage = "Ваш email уже подтверждён! Можете войти в аккаунт.";
+                isSuccess = true;
+                return;
+            }
+
+            // Генерируем новый токен и отправляем письмо
+            // Эта логика требует IEmailSender — можно перенаправить на Register с параметром resend=true
+            // или внедрить IEmailSender в эту страницу
+
+            NavigationManager.NavigateTo($"/Account/Register?resend=true&email={Email}");
+        }
+        catch (Exception ex)
+        {
+            statusMessage = "Не удалось отправить письмо. Попробуйте позже.";
+            isSuccess = false;
+        }
+        finally
+        {
+            isResending = false;
+        }
+    }
+}

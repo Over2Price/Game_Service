@@ -1,0 +1,430 @@
+﻿@* @page "/Account/Login"
+
+@using System.ComponentModel.DataAnnotations
+@using Game_Service.Data
+@using Game_Service.Data.Models
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ILogger<Login> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Log in</PageTitle>
+
+<h1>Log in</h1>
+<div class="row">
+    <div class="col-lg-6">
+        <section>
+            <StatusMessage Message="@errorMessage" />
+            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+                <DataAnnotationsValidator />
+                <h2>Use a local account to log in.</h2>
+                <hr />
+                <ValidationSummary class="text-danger" role="alert" />
+                <div class="form-floating mb-3">
+                    <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+                    <label for="Input.Email" class="form-label">Email</label>
+                    <ValidationMessage For="() => Input.Email" class="text-danger" />
+                </div>
+                <div class="form-floating mb-3">
+                    <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
+                    <label for="Input.Password" class="form-label">Password</label>
+                    <ValidationMessage For="() => Input.Password" class="text-danger" />
+                </div>
+                <div class="checkbox mb-3">
+                    <label class="form-label">
+                        <InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
+                        Remember me
+                    </label>
+                </div>
+                <div>
+                    <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
+                </div>
+                <div>
+                    <p>
+                        <a href="Account/ForgotPassword">Forgot your password?</a>
+                    </p>
+                    <p>
+                        <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Register as a new user</a>
+                    </p>
+                    <p>
+                        <a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
+                    </p>
+                </div>
+            </EditForm>
+        </section>
+    </div>
+    <div class="col-lg-4 col-lg-offset-2">
+        <section>
+            <h3>Use another service to log in.</h3>
+            <hr />
+            <ExternalLoginPicker />
+        </section>
+    </div>
+</div>
+
+@code {
+    private string? errorMessage;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            // Clear the existing external cookie to ensure a clean login process
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
+    }
+
+    public async Task LoginUser()
+    {
+        // This doesn't count login failures towards account lockout
+        // To enable password failures to trigger account lockout, set lockoutOnFailure: true
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User logged in.");
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.RequiresTwoFactor)
+        {
+            RedirectManager.RedirectTo(
+                "Account/LoginWith2fa",
+                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out.");
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            errorMessage = "Error: Invalid login attempt.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [Display(Name = "Remember me?")]
+        public bool RememberMe { get; set; }
+    }
+}
+ *@
+
+@page "/Account/Login"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Game_Service.Data.Models
+@using Microsoft.AspNetCore.WebUtilities
+@using System.Text
+@using System.Text.Encodings.Web
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<Login> Logger
+
+<PageTitle>Вход — Game Service</PageTitle>
+
+<div class="register-page">
+    <div class="register-container">
+        @* Левая декоративная часть *@
+        <div class="register-decoration">
+            <div class="decoration-content">
+                <div class="decoration-icon">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                </div>
+                <h2>С возвращением!</h2>
+                <p>Войдите в аккаунт, чтобы продолжить просматривать игровой каталог и оставлять отзывы.</p>
+                <div class="decoration-features">
+                    <div class="feature-item">
+                        <i class="bi bi-collection"></i>
+                        <span>Доступ к вашей библиотеке</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="bi bi-chat-dots"></i>
+                        <span>Отзывы и рекомендации</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="bi bi-building"></i>
+                        <span>Управление издательством</span>
+                    </div>
+                </div>
+            </div>
+            <div class="decoration-circles">
+                <div class="circle circle-1"></div>
+                <div class="circle circle-2"></div>
+                <div class="circle circle-3"></div>
+            </div>
+        </div>
+
+        @* Правая часть — форма входа *@
+        <div class="register-form-section">
+            <div class="form-header">
+                <h1>Войти в аккаунт</h1>
+                <p>
+                    Ещё нет аккаунта?
+                    <a href="/Account/Register">Зарегистрироваться</a>
+                </p>
+            </div>
+
+            @* Сообщение об успешной отправке письма *@
+            @if (resendSuccess)
+            {
+                <div class="alert alert-success fade-in">
+                    <i class="bi bi-check-circle"></i>
+                    <span>Письмо с подтверждением отправлено на <strong>@emailForResend</strong>. Проверьте почту.</span>
+                </div>
+            }
+
+            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="validation-summary" />
+
+                @* Email *@
+                <div class="form-group">
+                    <label for="Input_Email" class="form-label">Email</label>
+                    <InputText @bind-Value="Input.Email" id="Input_Email" class="form-control"
+                               autocomplete="email" aria-required="true" placeholder="you@example.com" />
+                    <ValidationMessage For="() => Input.Email" class="validation-message" />
+                </div>
+
+                @* Пароль *@
+                <div class="form-group">
+                    <label for="Input_Password" class="form-label">Пароль</label>
+                    <div class="password-input-wrapper">
+                        <InputText @bind-Value="Input.Password" id="Input_Password" class="form-control"
+                                   autocomplete="current-password" aria-required="true" placeholder="Ваш пароль"
+                                   type="@(showPassword ? "text" : "password")" />
+                    </div>
+                    <ValidationMessage For="() => Input.Password" class="validation-message" />
+                </div>
+
+                @* Запомнить меня *@
+                <div class="form-group form-check-wrapper">
+                    <InputCheckbox @bind-Value="Input.RememberMe" id="Input_RememberMe" class="form-check-input" />
+                    <label for="Input_RememberMe" class="form-check-label">
+                        Запомнить меня
+                    </label>
+                </div>
+
+                @* Кнопка входа *@
+                <button type="submit" class="btn btn-primary btn-submit" disabled="@isSubmitting">
+                    @if (isSubmitting)
+                    {
+                        <span class="spinner"></span>
+                        <span>Вход...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        <span>Войти</span>
+                    }
+                </button>
+
+                @* Ссылки под формой *@
+                <div class="login-links">
+                    <a href="/Account/ForgotPassword">Забыли пароль?</a>
+                    <a href="/Account/ResendEmailConfirmation">Подтвердить email</a>
+                </div>
+            </EditForm>
+
+            @* Ошибка входа *@
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-error fade-in">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <div>
+                        <span>@errorMessage</span>
+
+                        @* Если ошибка связана с неподтверждённым email — показываем кнопку *@
+                        @if (showResendButton)
+                        {
+                            <button class="btn btn-outline-primary btn-sm"
+                                    style="margin-top: 0.75rem; width: 100%;"
+                                    @onclick="ResendConfirmationEmail"
+                                    disabled="@isResending">
+                                @if (isResending)
+                                {
+                                    <span class="spinner"></span>
+                                    <span>Отправка...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-send"></i>
+                                    <span>Отправить письмо повторно</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private bool isSubmitting;
+    private bool isResending;
+    private bool showPassword;
+    private string? errorMessage;
+    private bool showResendButton;
+    private string? emailForResend;
+    private bool resendSuccess;
+
+    private async Task LoginUser(EditContext editContext)
+    {
+        isSubmitting = true;
+        errorMessage = null;
+        showResendButton = false;
+
+        try
+        {
+            // Сначала проверяем — подтверждён ли email
+            var user = await UserManager.FindByEmailAsync(Input.Email);
+            if (user != null && !await UserManager.IsEmailConfirmedAsync(user))
+            {
+                emailForResend = Input.Email;
+                errorMessage = "Ваш email не подтверждён. Проверьте почту или запросите письмо повторно.";
+                showResendButton = true;
+                return;
+            }
+
+            // Пытаемся войти
+            var result = await SignInManager.PasswordSignInAsync(
+                Input.Email,
+                Input.Password,
+                Input.RememberMe,
+                lockoutOnFailure: true);
+
+            if (result.Succeeded)
+            {
+                Logger.LogInformation("Пользователь {Email} вошёл в систему", Input.Email);
+                RedirectManager.RedirectTo(ReturnUrl);
+                return;
+            }
+
+            if (result.RequiresTwoFactor)
+            {
+                RedirectManager.RedirectTo(
+                    "Account/LoginWith2fa",
+                    new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+                return;
+            }
+
+            if (result.IsLockedOut)
+            {
+                Logger.LogWarning("Аккаунт {Email} заблокирован", Input.Email);
+                errorMessage = "Аккаунт временно заблокирован из-за множества неверных попыток. Попробуйте позже.";
+                return;
+            }
+
+            if (result.IsNotAllowed)
+            {
+                errorMessage = "Вход запрещён. Возможно, email не подтверждён.";
+                showResendButton = true;
+                emailForResend = Input.Email;
+                return;
+            }
+
+            errorMessage = "Неверный email или пароль.";
+        }
+        catch (NavigationException)
+        {
+            // Редирект — не ошибка, пробрасываем дальше
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при входе пользователя {Email}", Input.Email);
+            errorMessage = "Произошла внутренняя ошибка. Попробуйте позже.";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task ResendConfirmationEmail()
+    {
+        if (string.IsNullOrEmpty(emailForResend))
+            return;
+
+        isResending = true;
+        resendSuccess = false;
+
+        try
+        {
+            var user = await UserManager.FindByEmailAsync(emailForResend);
+            if (user == null || await UserManager.IsEmailConfirmedAsync(user))
+            {
+                errorMessage = null;
+                resendSuccess = true;
+                return;
+            }
+
+            var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+            var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                new Dictionary<string, object?> { ["userId"] = user.Id, ["code"] = code, ["returnUrl"] = ReturnUrl });
+
+            await EmailSender.SendConfirmationLinkAsync(user, emailForResend, HtmlEncoder.Default.Encode(callbackUrl));
+
+            errorMessage = null;
+            resendSuccess = true;
+            Logger.LogInformation("Письмо подтверждения повторно отправлено на {Email}", emailForResend);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при повторной отправке письма на {Email}", emailForResend);
+            errorMessage = "Не удалось отправить письмо. Попробуйте позже.";
+        }
+        finally
+        {
+            isResending = false;
+        }
+    }
+
+    private void TogglePassword() => showPassword = !showPassword;
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Email обязателен")]
+        [EmailAddress(ErrorMessage = "Некорректный формат email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Пароль обязателен")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = string.Empty;
+
+        [Display(Name = "Запомнить меня")]
+        public bool RememberMe { get; set; }
+    }
+}

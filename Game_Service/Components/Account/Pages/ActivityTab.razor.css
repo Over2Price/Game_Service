@@ -1,0 +1,136 @@
+﻿/* ===== КАРТОЧКИ АКТИВНОСТИ ===== */
+.activity-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+}
+
+    .activity-card h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+/* ===== ТАЙМЛАЙН ===== */
+.activity-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.timeline-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+    .timeline-item i {
+        color: var(--primary);
+        font-size: 1rem;
+        margin-top: 2px;
+        width: 20px;
+        text-align: center;
+    }
+
+.timeline-label {
+    font-weight: 600;
+    display: block;
+}
+
+.timeline-date {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    display: block;
+    margin-top: 2px;
+}
+
+/* ===== ОТЗЫВЫ ===== */
+.reviews-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.review-item {
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem;
+    background: var(--bg-light);
+}
+
+.review-item-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.35rem;
+}
+
+.review-game-link {
+    font-weight: 600;
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 1;
+}
+
+    .review-game-link:hover {
+        text-decoration: underline;
+    }
+
+.review-item-rating {
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+}
+
+.review-item-date {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.review-item-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0.2rem;
+}
+
+.review-item-content {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin: 0;
+}
+
+.review-item-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.review-recommend {
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.recommend-yes {
+    color: #16A34A;
+}
+
+.recommend-no {
+    color: #DC2626;
+}
